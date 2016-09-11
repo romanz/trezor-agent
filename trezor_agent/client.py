@@ -9,37 +9,31 @@ import logging
 import re
 import struct
 
+from onlykey import OnlyKey, Message
+
 from . import factory, formats, util
 import ed25519
-log = logging.getLogger(__name__)
+import time
 
+log = logging.getLogger(__name__)
 
 class Client(object):
     """Client wrapper for SSH authentication device."""
 
     def __init__(self, loader=factory.load, curve=formats.CURVE_ED25519):
         """Connect to hardware device."""
-        # client_wrapper = loader()
-        # self.client = client_wrapper.connection
-        # self.identity_type = client_wrapper.identity_type
         self.device_name =  'OnlyKey'
-        # client_wrapper.device_name
-        # client_wrapper.call_exception
+        self.ok = OnlyKey()
         self.curve = curve
-        self.signing_key = ed25519.SigningKey('f42c74f80350d005ea82801c95d282cbb81e6ef363f76759e8140fbf314d68a0', encoding='hex')
-        self.verifying_key = self.signing_key.get_verifying_key()
 
     def __enter__(self):
         """Start a session, and test connection."""
-        # msg = 'Hello World!'
-        # assert self.client.ping(msg) == msg
         return self
 
     def __exit__(self, *args):
         """Forget PIN, shutdown screen and disconnect."""
         log.info('disconnected from %s', self.device_name)
-        # self.client.clear_session()
-        # self.client.close()
+        self.ok.close()
 
     def get_identity(self, label, index=0):
         """Parse label string into Identity protobuf."""
@@ -56,13 +50,8 @@ class Client(object):
         # label = identity_to_string(identity)  # canonize key label
         log.info('getting "%s" public key (%s) from %s...',
                  label, self.curve, self.device_name)
-        # addr = get_address(identity)
-        # node = self.client.get_public_node(n=addr,
-                                           # ecdsa_curve_name=self.curve)
-
-        # pubkey = self.verifying_key  # node.node.public_key
-        # vk = formats.decompress_pubkey(pubkey=self.verifying_key, curve_name=self.curve)
-        vk = self.verifying_key
+        self.ok.send_message(msg=Message.OKGETSSHPUBKEY)
+        vk = ed25519.VerifyingKey(self.ok.read_bytes(32, to_str=True))
         return formats.export_public_key(vk=vk, label=label)
 
     def sign_ssh_challenge(self, label, blob):
@@ -78,26 +67,20 @@ class Client(object):
         log.info('please confirm user "%s" login to "%s" using %s...',
                  msg['user'], label, self.device_name)
 
-        try:
-            result = self.signing_key.sign(blob)
-            # result = self.client.sign_identity(identity=identity,
-            #                                    challenge_hidden=blob,
-            #                                    challenge_visual='',
-            #                                    ecdsa_curve_name=self.curve)
-        except self.call_exception as e:
-            code, msg = e.args
-            log.warning('%s error #%s: %s', self.device_name, code, msg)
-            raise IOError(msg)  # close current connection, keep server open
+        log.debug('blob len=%d', len(blob))
 
+        self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
+        raw_input('push button')
+        time.sleep(0.2)
+        for _ in xrange(3):
+            self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
+            for _ in xrange(50):
+                result = self.ok.read_string(timeout_ms=250)
+                log.debug('result from device = %s', result)
+                if len(result) == 64:
+                    return result
 
-        # key_type, blob = formats.serialize_verifying_key(verifying_key)
-        # assert blob == msg['public_key']['blob']
-        # assert key_type == msg['key_type']
-        # assert len(result.signature) == 65
-        # assert result.signature[:1] == bytearray([0])
-
-        # return result.signature[1:]
-        return result
+        raise Exception('failed to sign challenge')
 
 _identity_regexp = re.compile(''.join([
     '^'
