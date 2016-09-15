@@ -71,7 +71,7 @@ class Client(object):
 
         self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
         raw_input('push button')
-        time.sleep(0.2)
+        time.sleep(1)
         for _ in xrange(3):
             self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
             for _ in xrange(50):

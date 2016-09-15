@@ -2,13 +2,13 @@
 from setuptools import setup
 
 setup(
-    name='trezor_agent',
-    version='0.6.5',
-    description='Using Trezor as hardware SSH agent',
-    author='Roman Zeyde',
-    author_email='roman.zeyde@gmail.com',
-    url='http://github.com/romanz/trezor-agent',
-    packages=['trezor_agent', 'trezor_agent.gpg'],
+    name='onlykey_agent',
+    version='0.0.1',
+    description='Using OnlyKey as hardware SSH agent',
+    author='Thomas Sileo',
+    author_email='t@a4.io',
+    url='http://github.com/trustcrypto/onlykey-agent',
+    packages=['onlykey_agent'],
     install_requires=['ecdsa>=0.13', 'ed25519>=1.4', 'Cython>=0.23.4', 'protobuf>=2.6.1', 'semver>=2.2'],
     platforms=['POSIX'],
     classifiers=[
@@ -28,8 +28,6 @@ setup(
         'Topic :: Utilities',
     ],
     entry_points={'console_scripts': [
-        'trezor-agent = trezor_agent.__main__:run_agent',
-        'trezor-git = trezor_agent.__main__:run_git',
-        'trezor-gpg = trezor_agent.gpg.__main__:main',
+        'onlykey-agent = onlykey_agent.__main__:run_agent',
     ]},
 )
