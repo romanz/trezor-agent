@@ -7,32 +7,37 @@ import binascii
 import io
 import logging
 import re
-import struct
 
 from onlykey import OnlyKey, Message
 
-from . import factory, formats, util
+from . import formats, util
 import ed25519
 import time
 
 log = logging.getLogger(__name__)
 
+
 class Client(object):
     """Client wrapper for SSH authentication device."""
 
-    def __init__(self, loader=factory.load, curve=formats.CURVE_ED25519):
+    def __init__(self, curve=formats.CURVE_ED25519):
         """Connect to hardware device."""
-        self.device_name =  'OnlyKey'
+        self.device_name = 'OnlyKey'
         self.ok = OnlyKey()
+        # TODO(tsileo): hard-code the curve and remove/disable the CLI args
         self.curve = curve
 
     def __enter__(self):
         """Start a session, and test connection."""
+        self.ok.read_string(timeout_ms=50)
+        empty = 'a'
+        while not empty:
+            empty = self.ok.read_string(timeout_ms=50)
         return self
 
     def __exit__(self, *args):
         """Forget PIN, shutdown screen and disconnect."""
-        log.info('disconnected from %s', self.device_name)
+        log.info('disconnected from OnlyKey', self.device_name)
         self.ok.close()
 
     def get_identity(self, label, index=0):
@@ -45,18 +50,19 @@ class Client(object):
 
     def get_public_key(self, label):
         """Get SSH public key corresponding to specified by label."""
-        print 'pk label', label
-        identity = self.get_identity(label=label)
-        # label = identity_to_string(identity)  # canonize key label
-        log.info('getting "%s" public key (%s) from %s...',
-                 label, self.curve, self.device_name)
+        log.info('getting public key (%s) from %s...',
+                 self.curve, self.device_name)
+
         self.ok.send_message(msg=Message.OKGETSSHPUBKEY)
+
+        time.sleep(1)
+
         vk = ed25519.VerifyingKey(self.ok.read_bytes(32, to_str=True))
+
         return formats.export_public_key(vk=vk, label=label)
 
     def sign_ssh_challenge(self, label, blob):
         """Sign given blob using a private key, specified by the label."""
-        identity = self.get_identity(label=label)
         msg = _parse_ssh_blob(blob)
         log.debug('%s: user %r via %r (%r)',
                   msg['conn'], msg['user'], msg['auth'], msg['key_type'])
@@ -64,16 +70,15 @@ class Client(object):
         log.debug('fingerprint: %s', msg['public_key']['fingerprint'])
         log.debug('hidden challenge size: %d bytes', len(blob))
 
-        log.info('please confirm user "%s" login to "%s" using %s...',
+        self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
+        log.info('please confirm user "%s" login to "%s" using %s by touching a button...',
                  msg['user'], label, self.device_name)
 
-        log.debug('blob len=%d', len(blob))
-
-        self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
-        raw_input('push button')
-        time.sleep(1)
+        raw_input('')
+        time.sleep(0.2)
         for _ in xrange(3):
             self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
+            time.sleep(1)
             for _ in xrange(50):
                 result = self.ok.read_string(timeout_ms=250)
                 log.debug('result from device = %s', result)
@@ -100,37 +105,6 @@ def string_to_identity(s, identity_type=dict):
     log.debug('parsed identity: %s', result)
     kwargs = {k: v for k, v in result.items() if v}
     return identity_type(**kwargs)
-
-
-def identity_to_string(identity):
-    """Dump Identity protobuf into its string representation."""
-    print identity
-    return ''
-    # result = []
-    # if identity.proto:
-    #     result.append(identity.proto + '://')
-    # if identity.user:
-    #     result.append(identity.user + '@')
-    # result.append(identity.host)
-    # if identity.port:
-    #     result.append(':' + identity.port)
-    # if identity.path:
-    #     result.append(identity.path)
-    # return ''.join(result)
-
-
-def get_address(identity, ecdh=False):
-    """Compute BIP32 derivation address according to SLIP-0013/0017."""
-    index = struct.pack('<L', identity.index)
-    addr = index + identity_to_string(identity).encode('ascii')
-    log.debug('address string: %r', addr)
-    digest = formats.hashfunc(addr).digest()
-    s = io.BytesIO(bytearray(digest))
-
-    hardened = 0x80000000
-    addr_0 = [13, 17][bool(ecdh)]
-    address_n = [addr_0] + list(util.recv(s, '<LLLL'))
-    return [(hardened | value) for value in address_n]
 
 
 def _parse_ssh_blob(data):
