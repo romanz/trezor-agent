@@ -130,8 +130,8 @@ def handle_connection(conn):
         elif command == 'KEYINFO':
             keygrip, = args
             # Dummy reply (mainly for 'gpg --edit' to succeed).
-            # TODO: What does this message even mean?
-            fmt = b'S KEYINFO {0} D - - - C - - -'
+            # For details, see GnuPG agent KEYINFO command help.
+            fmt = b'S KEYINFO {0} X - - - - - - -'
             keyring.sendline(conn, fmt.format(keygrip))
         elif command == 'BYE':
             return
