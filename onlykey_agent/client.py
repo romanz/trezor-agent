@@ -37,7 +37,7 @@ class Client(object):
 
     def __exit__(self, *args):
         """Forget PIN, shutdown screen and disconnect."""
-        log.info('disconnected from OnlyKey', self.device_name)
+        log.info('disconnected from %s', self.device_name)
         self.ok.close()
 
     def get_identity(self, label, index=0):
