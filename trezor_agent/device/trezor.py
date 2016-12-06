@@ -6,6 +6,8 @@ import semver
 
 from . import interface
 
+import getpass
+
 log = logging.getLogger(__name__)
 
 
@@ -18,14 +20,15 @@ class Trezor(interface.Device):
 
     def connect(self):
         """Enumerate and connect to the first USB HID interface."""
-        def empty_passphrase_handler(_):
-            return self.defs.PassphraseAck(passphrase='')
+        def passphrase_handler(_):
+            user_passphrase = getpass.getpass("Enter passphrase (optional): ")
+            return self.defs.PassphraseAck(passphrase=user_passphrase)
 
         for d in self.defs.HidTransport.enumerate():
             log.debug('endpoint: %s', d)
             transport = self.defs.HidTransport(d)
             connection = self.defs.Client(transport)
-            connection.callback_PassphraseRequest = empty_passphrase_handler
+            connection.callback_PassphraseRequest = passphrase_handler
             f = connection.features
             log.debug('connected to %s %s', self, f.device_id)
             log.debug('label    : %s', f.label)
