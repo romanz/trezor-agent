@@ -21,7 +21,7 @@ $ pip install git+git://github.com/trustcrypto/onlykey-agent.git
 
 Run:
 
-	/tmp $ only-agent ssh.hostname.com -v > hostname.pub
+	/tmp $ onlykey-agent ssh.hostname.com -v > hostname.pub
 	2015-09-02 15:03:18,929 INFO         getting "ssh://ssh.hostname.com" public key from Trezor...
 	2015-09-02 15:03:23,342 INFO         disconnected from Trezor
 	/tmp $ cat hostname.pub
