@@ -7,6 +7,7 @@ import binascii
 import io
 import logging
 import re
+import hashlib
 
 from onlykey import OnlyKey, Message
 
@@ -53,9 +54,10 @@ class Client(object):
         log.info('getting public key (%s) from %s...',
                  self.curve, self.device_name)
 
-        self.ok.send_message(msg=Message.OKGETSSHPUBKEY)
-
+        self.ok.send_message(msg=Message.OKGETPUBKEY, payload=chr(101))
         time.sleep(1)
+
+        # self.ok.send_message(msg=Message.OKGETSSHPUBKEY)
 
         vk = ed25519.VerifyingKey(self.ok.read_bytes(32, to_str=True))
 
@@ -70,20 +72,38 @@ class Client(object):
         log.debug('fingerprint: %s', msg['public_key']['fingerprint'])
         log.debug('hidden challenge size: %d bytes', len(blob))
 
-        self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
-        log.info('please confirm user "%s" login to "%s" using %s by touching a button...',
+        # self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
+        log.info('please confirm user "%s" login to "%s" using %s',
                  msg['user'], label, self.device_name)
 
-        raw_input('')
-        time.sleep(0.2)
-        for _ in xrange(3):
-            self.ok.send_large_message(payload=blob, msg=Message.OKSIGNSSHCHALLENGE)
-            time.sleep(1)
-            for _ in xrange(50):
-                result = self.ok.read_string(timeout_ms=250)
-                log.debug('result from device = %s', result)
-                if len(result) == 64:
-                    return result
+
+        test_payload = blob
+        # Compute the challenge pin
+        h = hashlib.sha256()
+        h.update(test_payload)
+        d = h.digest()
+
+        assert len(d) == 32
+
+        def get_button(byte):
+            ibyte = ord(byte)
+            if ibyte < 6:
+                return 1
+            return ibyte % 5 + 1
+
+        b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
+
+        self.ok.send_large_message2(msg=Message.OKSIGNCHALLENGE, payload=test_payload, slot_id=101)
+
+
+        log.info('Please enter the 3 digit challenge code on OnlyKey (and press ENTER if necessary)')
+        print '{} {} {}'.format(b1, b2, b3)
+        raw_input()
+        for _ in xrange(50):
+            result = self.ok.read_string(timeout_ms=250)
+            log.debug('result from device = %s', result)
+            if len(result) == 64:
+                return result
 
         raise Exception('failed to sign challenge')
 
