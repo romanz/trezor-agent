@@ -32,6 +32,8 @@ def create_parser():
 
     curve_names = [name for name in formats.SUPPORTED_CURVES]
     curve_names = ', '.join(sorted(curve_names))
+    p.add_argument('--slot', default='1', action='store',
+                   help='Set the OnlyKey ECC key slot (1-32), defaults to 1.')
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
                    default=formats.CURVE_ED25519,
                    help='specify ECDSA curve name: ' + curve_names)
@@ -134,7 +136,7 @@ def run_agent(client_factory=client.Client):
     args = create_agent_parser().parse_args()
     setup_logging(verbosity=args.verbose)
 
-    with client_factory(curve=args.ecdsa_curve_name) as conn:
+    with client_factory(curve=args.ecdsa_curve_name, slot=args.slot) as conn:
         label = args.identity
         command = args.command
 

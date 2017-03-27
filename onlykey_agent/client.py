@@ -21,12 +21,13 @@ log = logging.getLogger(__name__)
 class Client(object):
     """Client wrapper for SSH authentication device."""
 
-    def __init__(self, curve=formats.CURVE_ED25519):
+    def __init__(self, curve=formats.CURVE_ED25519, slot='1'):
         """Connect to hardware device."""
         self.device_name = 'OnlyKey'
         self.ok = OnlyKey()
         # TODO(tsileo): hard-code the curve and remove/disable the CLI args
         self.curve = curve
+        self.slot = int('1%02d' % int(slot))  # Will rebuilt the slot ID, like 101 for slot 1
 
     def __enter__(self):
         """Start a session, and test connection."""
@@ -54,7 +55,7 @@ class Client(object):
         log.info('getting public key (%s) from %s...',
                  self.curve, self.device_name)
 
-        self.ok.send_message(msg=Message.OKGETPUBKEY, payload=chr(101))
+        self.ok.send_message(msg=Message.OKGETPUBKEY, payload=chr(self.slot))
         time.sleep(1)
 
         # self.ok.send_message(msg=Message.OKGETSSHPUBKEY)
@@ -93,7 +94,7 @@ class Client(object):
 
         b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
 
-        self.ok.send_large_message2(msg=Message.OKSIGNCHALLENGE, payload=test_payload, slot_id=101)
+        self.ok.send_large_message2(msg=Message.OKSIGNCHALLENGE, payload=test_payload, slot_id=self.slot)
 
 
         log.info('Please enter the 3 digit challenge code on OnlyKey (and press ENTER if necessary)')

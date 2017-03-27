@@ -21,7 +21,7 @@ $ pip install git+git://github.com/trustcrypto/onlykey-agent.git
 
 Run:
 
-	/tmp $ onlykey-agent ssh.hostname.com -v > hostname.pub
+	/tmp $ onlykey-agent ssh.hostname.com --slot 1 -v > hostname.pub
 	2015-09-02 15:03:18,929 INFO         getting "ssh://ssh.hostname.com" public key from OnlyKey...
 	2015-09-02 15:03:23,342 INFO         disconnected from Trezor
 	/tmp $ cat hostname.pub
@@ -35,7 +35,7 @@ would allow you to login using the corresponding private key signature.
 
 Run:
 
-	/tmp $ onlykey-agent ssh.hostname.com -v -c
+	/tmp $ onlykey-agent ssh.hostname.com --slot 1 -v -c
 	2015-09-02 15:09:39,782 INFO         getting public key from the OnlyKey...
 	2015-09-02 15:09:44,430 INFO         please confirm user "thomas" login to "ssh://ssh.hostname.com" by touching a button
 	2015-09-02 15:09:46,152 INFO         signature status: OK
