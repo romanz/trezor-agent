@@ -16,11 +16,11 @@ DEVICE_TYPES = [
 ]
 
 
-def detect():
+def detect(transport_string):
     """Detect the first available device and return it to the user."""
     for device_type in DEVICE_TYPES:
         try:
-            with device_type() as d:
+            with device_type(transport_string) as d:
                 return d
         except interface.NotFoundError as e:
             log.debug('device not found: %s', e)

@@ -12,7 +12,8 @@ setup(
     install_requires=[
         'ecdsa>=0.13', 'ed25519>=1.4', 'Cython>=0.23.4', 'protobuf>=3.0.0', 'semver>=2.2',
         'trezor>=0.7.6', 'keepkey>=0.7.3', 'ledgerblue>=0.1.8',
-        'hidapi==0.7.99.post15'  # until https://github.com/keepkey/python-keepkey/pull/8 is merged
+        'hidapi==0.7.99.post15',  # until https://github.com/keepkey/python-keepkey/pull/8 is merged
+        'requests', # required by trezorlib.transport_bridge
     ],
     platforms=['POSIX'],
     classifiers=[

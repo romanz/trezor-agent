@@ -67,6 +67,8 @@ def create_agent_parser():
                    help='run ${SHELL} as subprocess under SSH agent')
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
+    p.add_argument('-t', '--transport', default='usb', choices=['usb', 'bridge'],
+                   help='Transport used for talking with the device (Trezor only)')
     g.add_argument('--mosh', default=False, action='store_true',
                    help='connect to specified host via using Mosh')
 
@@ -194,7 +196,7 @@ def run_agent(client_factory=client.Client):
         command = os.environ['SHELL']
 
     conn = JustInTimeConnection(
-        conn_factory=lambda: client_factory(device.detect()),
+        conn_factory=lambda: client_factory(device.detect(args.transport)),
         identities=identities)
     if command:
         return run_server(conn=conn, command=command, debug=args.debug,
