@@ -48,7 +48,7 @@ SIG = (b'R\x19T\xf2\x84$\xef#\x0e\xee\x04X\xc6\xc3\x99T`\xd1\xd8\xf7!'
 def test_ssh_agent():
     identity = device.interface.Identity(identity_str='localhost:22',
                                          curve_name=CURVE)
-    c = client.Client(device=MockDevice())
+    c = client.Client(device=MockDevice('hid'))
     assert c.get_public_key(identity) == PUBKEY_TEXT
     signature = c.sign_ssh_challenge(blob=BLOB, identity=identity)
 
