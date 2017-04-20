@@ -7,6 +7,8 @@ import re
 import subprocess
 import sys
 
+from collections import OrderedDict
+
 from . import client, device, formats, protocol, server, util
 
 log = logging.getLogger(__name__)
@@ -149,11 +151,22 @@ class JustInTimeConnection(object):
         """Create a JIT connection object."""
         self.conn_factory = conn_factory
         self.identities = identities
+        self.pubkeys_cache = OrderedDict()
 
     def public_keys(self):
         """Return a list of SSH public keys (in textual format)."""
-        conn = self.conn_factory()
-        return conn.get_public_keys(self.identities)
+        missing = []
+
+        for identity in self.identities:
+            if identity in self.pubkeys_cache: continue
+            missing.append(identity)
+
+        if missing:
+            conn = self.conn_factory()
+            for identity, pubkey in zip(missing, conn.get_public_keys(missing)):
+                self.pubkeys_cache[identity] = pubkey
+
+        return self.pubkeys_cache.values()
 
     def parse_public_keys(self):
         """Parse SSH public keys into dictionaries."""
