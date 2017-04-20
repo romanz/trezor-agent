@@ -54,7 +54,7 @@ class NotFoundError(Error):
 
 
 class DeviceError(Error):
-    """"Error during device operation."""
+    """Error during device operation."""
 
 
 class Identity(object):
@@ -74,18 +74,18 @@ class Identity(object):
         return '<{}|{}>'.format(identity_to_string(self.identity_dict), self.curve_name)
 
     def __eq__(self, other):
-        """Allow Identity to be compared for equality"""
+        """Allow Identity to be compared for equality."""
         if isinstance(other, self.__class__):
             return str(self) == str(other)
         else:
             return False
 
     def __ne__(self, other):
-        """Allow Identity to be compared for inequality"""
+        """Allow Identity to be compared for inequality."""
         return not self.__eq__(other)
 
     def __hash__(self):
-        """Allow Identity to be used as a dictionary key"""
+        """Allow Identity to be used as a dictionary key."""
         return hash(str(self))
 
     def get_bip32_address(self, ecdh=False):

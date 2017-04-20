@@ -115,7 +115,7 @@ def git_host(remote_name, attributes):
 
 
 def run_server(conn, command, debug, timeout):
-    """Common code for run_agent and run_git below."""
+    """Start socket server for run_agent and run_git below."""
     try:
         handler = protocol.Handler(conn=conn, debug=debug)
         with server.serve(handler=handler, timeout=timeout) as env:

@@ -65,7 +65,7 @@ def run_create(args):
 
 
 def main_create():
-    """Main function for GPG identity creation."""
+    """Create GPG identity."""
     p = argparse.ArgumentParser()
     p.add_argument('user_id')
     p.add_argument('-e', '--ecdsa-curve', default='nist256p1')

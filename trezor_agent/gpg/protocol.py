@@ -202,7 +202,7 @@ class PublicKey(object):
         return self.curve_info['keygrip'](self.verifying_key)
 
     def data(self):
-        """Data for packet creation."""
+        """Generate data for packet creation."""
         header = struct.pack('>BLB',
                              4,             # version
                              self.created,  # creation
@@ -212,7 +212,7 @@ class PublicKey(object):
         return header + oid + blob + self.ecdh_packet
 
     def data_to_hash(self):
-        """Data for digest computation."""
+        """Generate data for digest computation."""
         return b'\x99' + util.prefix_len('>H', self.data())
 
     def _fingerprint(self):

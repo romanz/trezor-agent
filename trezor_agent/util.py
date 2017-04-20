@@ -141,7 +141,7 @@ def prefix_len(fmt, blob):
 
 
 def hexlify(blob):
-    """Utility for consistent hexadecimal formatting."""
+    """Format blob as hexadecimal."""
     return binascii.hexlify(blob).decode('ascii').upper()
 
 
@@ -189,12 +189,12 @@ def setup_logging(verbosity, **kwargs):
 
 
 def memoize(func):
-    """Simple caching decorator."""
+    """Cache func's return value."""
     cache = {}
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        """Caching wrapper."""
+        """Cache based on passed arguments."""
         key = (args, tuple(sorted(kwargs.items())))
         if key in cache:
             return cache[key]
