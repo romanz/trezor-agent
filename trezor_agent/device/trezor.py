@@ -29,7 +29,7 @@ class Trezor(interface.Device):
                       'non-empty' if self.passphrase else 'empty', self)
             return self._defs.PassphraseAck(passphrase=self.passphrase)
 
-        if self.transport_string == 'usb':
+        if self.transport_string == 'hid':
             from trezorlib.transport_hid import HidTransport as Transport
         elif self.transport_string == 'bridge':
             from trezorlib.transport_bridge import BridgeTransport as Transport

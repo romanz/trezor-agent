@@ -69,7 +69,7 @@ def create_agent_parser():
                    help='run ${SHELL} as subprocess under SSH agent')
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
-    p.add_argument('-t', '--transport', default='usb', choices=['usb', 'bridge'],
+    p.add_argument('-t', '--transport', default='hid', choices=['hid', 'bridge'],
                    help='Transport used for talking with the device (Trezor only)')
     g.add_argument('--mosh', default=False, action='store_true',
                    help='connect to specified host via using Mosh')
