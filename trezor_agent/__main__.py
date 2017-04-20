@@ -158,7 +158,8 @@ class JustInTimeConnection(object):
         missing = []
 
         for identity in self.identities:
-            if identity in self.pubkeys_cache: continue
+            if identity in self.pubkeys_cache:
+                continue
             missing.append(identity)
 
         if missing:
