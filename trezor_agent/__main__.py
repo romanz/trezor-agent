@@ -153,7 +153,7 @@ class JustInTimeConnection(object):
     def public_keys(self):
         """Return a list of SSH public keys (in textual format)."""
         conn = self.conn_factory()
-        return [conn.get_public_key(i) for i in self.identities]
+        return conn.get_public_keys(self.identities)
 
     def parse_public_keys(self):
         """Parse SSH public keys into dictionaries."""
