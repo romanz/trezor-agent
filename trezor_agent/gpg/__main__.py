@@ -20,7 +20,8 @@ def run_create(args):
     log.warning('NOTE: in order to re-generate the exact same GPG key later, '
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
-    d = client.Client(user_id=args.user_id, curve_name=args.ecdsa_curve)
+    d = client.Client(user_id=args.user_id, curve_name=args.ecdsa_curve,
+                      transport_string=args.transport)
     verifying_key = d.pubkey(ecdh=False)
     decryption_key = d.pubkey(ecdh=True)
 
@@ -72,6 +73,8 @@ def main_create():
     p.add_argument('-t', '--time', type=int, default=int(time.time()))
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('-s', '--subkey', default=False, action='store_true')
+    p.add_argument('--transport', default='hid', choices=['hid', 'bridge'],
+                   help='Transport used for talking with the device (Trezor only)')
 
     args = p.parse_args()
     util.setup_logging(verbosity=args.verbose)
@@ -118,9 +121,11 @@ def main_agent():
 def auto_unlock():
     """Automatically unlock first found device (used for `gpg-shell`)."""
     p = argparse.ArgumentParser()
+    p.add_argument('-t', '--transport', default='hid', choices=['hid', 'bridge'],
+                   help='Transport used for talking with the device (Trezor only)')
     p.add_argument('-v', '--verbose', default=0, action='count')
 
     args = p.parse_args()
     util.setup_logging(verbosity=args.verbose)
-    d = device.detect()
+    d = device.detect(args.transport)
     log.info('unlocked %s device', d)
