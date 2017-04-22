@@ -28,6 +28,19 @@ class Client(object):
         return formats.export_public_key(vk=vk,
                                          label=str(identity))
 
+    def get_public_keys(self, identities):
+        """Get SSH public keys from the device."""
+        pubkeys = []
+        with self.device:
+            for identity in identities:
+                pubkey = self.device.pubkey(identity)
+
+                vk = formats.decompress_pubkey(pubkey=pubkey,
+                                               curve_name=identity.curve_name)
+                pubkeys.append(formats.export_public_key(vk=vk, label=str(identity)))
+
+        return pubkeys
+
     def sign_ssh_challenge(self, blob, identity):
         """Sign given blob using a private key on the device."""
         msg = _parse_ssh_blob(blob)

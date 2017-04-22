@@ -73,6 +73,21 @@ class Identity(object):
         """Return identity serialized to string."""
         return '<{}|{}>'.format(identity_to_string(self.identity_dict), self.curve_name)
 
+    def __eq__(self, other):
+        """Allow Identity to be compared for equality."""
+        if isinstance(other, self.__class__):
+            return str(self) == str(other)
+        else:
+            return False
+
+    def __ne__(self, other):
+        """Allow Identity to be compared for inequality."""
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        """Allow Identity to be used as a dictionary key."""
+        return hash(str(self))
+
     def get_bip32_address(self, ecdh=False):
         """Compute BIP32 derivation address according to SLIP-0013/0017."""
         index = struct.pack('<L', self.identity_dict.get('index', 0))
@@ -97,9 +112,10 @@ class Identity(object):
 class Device(object):
     """Abstract cryptographic hardware device interface."""
 
-    def __init__(self):
+    def __init__(self, transport_string):
         """C-tor."""
         self.conn = None
+        self.transport_string = transport_string
 
     def connect(self):
         """Connect to device, otherwise raise NotFoundError."""

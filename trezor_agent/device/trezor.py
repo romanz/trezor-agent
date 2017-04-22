@@ -29,9 +29,14 @@ class Trezor(interface.Device):
                       'non-empty' if self.passphrase else 'empty', self)
             return self._defs.PassphraseAck(passphrase=self.passphrase)
 
-        for d in self._defs.HidTransport.enumerate():
+        if self.transport_string == 'hid':
+            from trezorlib.transport_hid import HidTransport as Transport
+        elif self.transport_string == 'bridge':
+            from trezorlib.transport_bridge import BridgeTransport as Transport
+
+        for d in Transport.enumerate():
             log.debug('endpoint: %s', d)
-            transport = self._defs.HidTransport(d)
+            transport = Transport(d)
             connection = self._defs.Client(transport)
             connection.callback_PassphraseRequest = passphrase_handler
             f = connection.features

@@ -7,6 +7,8 @@ import re
 import subprocess
 import sys
 
+from collections import OrderedDict
+
 from . import client, device, formats, protocol, server, util
 
 log = logging.getLogger(__name__)
@@ -67,6 +69,8 @@ def create_agent_parser():
                    help='run ${SHELL} as subprocess under SSH agent')
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
+    p.add_argument('-t', '--transport', default='hid', choices=['hid', 'bridge'],
+                   help='Transport used for talking with the device (Trezor only)')
     g.add_argument('--mosh', default=False, action='store_true',
                    help='connect to specified host via using Mosh')
 
@@ -111,7 +115,7 @@ def git_host(remote_name, attributes):
 
 
 def run_server(conn, command, debug, timeout):
-    """Common code for run_agent and run_git below."""
+    """Start socket server for run_agent and run_git below."""
     try:
         handler = protocol.Handler(conn=conn, debug=debug)
         with server.serve(handler=handler, timeout=timeout) as env:
@@ -147,11 +151,23 @@ class JustInTimeConnection(object):
         """Create a JIT connection object."""
         self.conn_factory = conn_factory
         self.identities = identities
+        self.pubkeys_cache = OrderedDict()
 
     def public_keys(self):
         """Return a list of SSH public keys (in textual format)."""
-        conn = self.conn_factory()
-        return [conn.get_public_key(i) for i in self.identities]
+        missing = []
+
+        for identity in self.identities:
+            if identity in self.pubkeys_cache:
+                continue
+            missing.append(identity)
+
+        if missing:
+            conn = self.conn_factory()
+            for identity, pubkey in zip(missing, conn.get_public_keys(missing)):
+                self.pubkeys_cache[identity] = pubkey
+
+        return self.pubkeys_cache.values()
 
     def parse_public_keys(self):
         """Parse SSH public keys into dictionaries."""
@@ -194,7 +210,7 @@ def run_agent(client_factory=client.Client):
         command = os.environ['SHELL']
 
     conn = JustInTimeConnection(
-        conn_factory=lambda: client_factory(device.detect()),
+        conn_factory=lambda: client_factory(device.detect(args.transport)),
         identities=identities)
     if command:
         return run_server(conn=conn, command=command, debug=args.debug,
