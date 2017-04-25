@@ -5,6 +5,8 @@ import functools
 import io
 import logging
 import struct
+import socket
+import time
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +35,12 @@ def recv(conn, size):
 
     res = io.BytesIO()
     while size > 0:
-        buf = _read(size)
+        try:
+            buf = _read(size)
+        except socket.error as ex:
+            if str(ex) == "[Errno 35] Resource temporarily unavailable":
+                time.sleep(0)
+                continue
         if not buf:
             raise EOFError
         size = size - len(buf)
