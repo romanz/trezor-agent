@@ -8,11 +8,24 @@ The project started from a fork [trezor-agent](https://github.com/romanz/trezor-
 
 **Not published on PyPI yet.**
 
+You will probably need to run these commands as root (e.g. with `sudo`), unless you have changed your system configuration to support the installation of packages as a normal user.
+
+### Ubuntu
+
+```sh
+apt-get install python-dev libusb-1.0-0-dev libudev-dev
+pip install Cython
+pip install git+git://github.com/trustcrypto/python-onlykey.git
+pip install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
-$ apt-get install python-dev libusb-1.0-0-dev libudev-dev
-$ pip install Cython
-$ pip install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip install git+git://github.com/trustcrypto/onlykey-agent.git
+
+### OpenSUSE
+
+```sh
+zypper install python-pip python-devel libusb-1_0-devel libudev-devel
+pip2 install Cython
+pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 
 ## Getting started
