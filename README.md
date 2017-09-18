@@ -4,18 +4,33 @@ SSH agent for the OnlyKey.
 
 The project started from a fork [trezor-agent](https://github.com/romanz/trezor-agent) (thanks!).
 
+**Still in early development.**
+
 ## Installation
 
-**Not published on PyPI yet.**
-
+### Debian 
 ```
-$ apt-get install python-dev libusb-1.0-0-dev libudev-dev
+$ apt update && apt upgrade
+$ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
+$ pip install -U setuptools pip
+$ pip install Cython
+$ pip install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip install git+git://github.com/trustcrypto/onlykey-agent.git
+```
+### Fedora/RedHat
+```
+$ yum update
+$ yum install python-pip python-devel libusb-devel libudev-devel \
+              gcc redhat-rpm-config
+$ pip install -U setuptools pip
 $ pip install Cython
 $ pip install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 
 ## Getting started
+
+In order for non-root users in Linux to be able to communicate with OnlyKey a udev rule must be created as described [here](https://www.pjrc.com/teensy/td_download.html).
 
 ### Public key generation
 
