@@ -63,4 +63,4 @@ to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote 
 	2017-09-19 00:15:30,946 INFO         Please enter the 3 digit challenge code on OnlyKey (and press ENTER if necessary)                    
 	2 1 4
 	
-*Enter the challenge code on OnlyKey*
+*Enter the shown challenge code on OnlyKey, 2-1-4*
