@@ -32,6 +32,43 @@ $ pip install git+git://github.com/trustcrypto/onlykey-agent.git
 
 In order for non-root users in Linux to be able to communicate with OnlyKey a udev rule must be created as described [here](https://www.pjrc.com/teensy/td_download.html).
 
+### Create Private Key
+
+Currently the Onlykey SSH Agent supports ED25519 keys. A new key may be generated as follows:
+
+	$ openssl list -public-key-algorithms | grep X25519
+
+	You should see something like this: 
+	Name: OpenSSL X25519 algorithm
+		OID: X25519
+		PEM string: X25519
+
+	If not you will need an up-to-date version of OpenSSL to continue.
+
+	$ openssl genpkey -algorithm X25519 -out X25519.key -aes256
+	Enter PEM pass phrase:
+	Verifying - Enter PEM pass phrase:
+	$ openssl pkey -in X25519.key -noout -text 2>/dev/null |   sed -n '/priv:/,/pub:/p' | grep -o '[0-9a-f]\{2\}' | tr -d ' \n'
+	Enter pass phrase for X25519.key:
+	d86a400b75130eea2e204635dcf84c4a6f8e57e2be899da4d1e469b614ca786a
+
+Copy the output from this command i.e.
+
+`d86a400b75130eea2e204635dcf84c4a6f8e57e2be899da4d1e469b614ca786a`
+
+Open the OnlyKey app and select the Keys tab.
+Follow the onscreen instructions to put OnlyKey into config mode.
+
+Once OnlyKey is in config mode (Flashing Red):
+- Select Type 
+- Select desired Slot
+- Paste the key you copied in into the Key field
+- Select “Set as signature key” and “Set as authentication key”
+
+Save to OnlyKey, and you should see a message confirming success.
+
+Once this is complete be sure to delete the key you created (X25519.key) or store it somewhere safe as a backup
+
 ### Public key generation
 
 **Run Verbose**
