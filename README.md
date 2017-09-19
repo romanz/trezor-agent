@@ -46,7 +46,11 @@ In order for non-root users in Linux to be able to communicate with OnlyKey a ud
 	$ onlykey-agent test@hostname.com --slot 1
 	ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
 		
-Append the output from this command i.e. `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com` to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote server would allow you to login using the corresponding private key signature.
+Append the output from this command i.e. 
+
+`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com`
+
+to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote server would allow you to login using the corresponding private key signature.
 
 ### Usage
 
