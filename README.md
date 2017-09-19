@@ -38,12 +38,12 @@ Currently the Onlykey SSH Agent supports ED25519 keys. A new key may be generate
 
 	$ openssl list -public-key-algorithms | grep X25519
 
-	You should see something like this: 
-	Name: OpenSSL X25519 algorithm
-		OID: X25519
-		PEM string: X25519
+You should see something like this: 
+Name: OpenSSL X25519 algorithm
+	OID: X25519
+	PEM string: X25519
 
-	If not you will need an up-to-date version of OpenSSL to continue.
+If not you will need an up-to-date version of OpenSSL to continue.
 
 	$ openssl genpkey -algorithm X25519 -out X25519.key -aes256
 	Enter PEM pass phrase:
