@@ -63,6 +63,17 @@ def _parse_nist256p1_pubkey(mpi):
         hashfunc=hashlib.sha256)
 
 
+def _parse_nist521p1_pubkey(mpi):
+    prefix, x, y = util.split_bits(mpi, 4, 528, 528)
+    if prefix != 4:
+        raise ValueError('Invalid MPI prefix: {}'.format(prefix))
+    point = ecdsa.ellipticcurve.Point(curve=ecdsa.NIST521p.curve,
+                                      x=x, y=y)
+    return ecdsa.VerifyingKey.from_public_point(
+        point=point, curve=ecdsa.curves.NIST521p,
+        hashfunc=hashlib.sha512)
+
+
 def _parse_ed25519_pubkey(mpi):
     prefix, value = util.split_bits(mpi, 8, 256)
     if prefix != 0x40:
@@ -73,6 +84,8 @@ def _parse_ed25519_pubkey(mpi):
 SUPPORTED_CURVES = {
     b'\x2A\x86\x48\xCE\x3D\x03\x01\x07':
         (_parse_nist256p1_pubkey, protocol.keygrip_nist256),
+    b'\x2B\x81\x04\x00\x23':
+        (_parse_nist521p1_pubkey, protocol.keygrip_nist521),
     b'\x2B\x06\x01\x04\x01\xDA\x47\x0F\x01':
         (_parse_ed25519_pubkey, protocol.keygrip_ed25519),
     b'\x2B\x06\x01\x04\x01\x97\x55\x01\x05\x01':
