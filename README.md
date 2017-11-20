@@ -8,24 +8,43 @@ The project started from a fork [trezor-agent](https://github.com/romanz/trezor-
 
 ## Installation
 
+
+You will probably need to run these commands as root (e.g. with `sudo`), unless you have changed your system configuration to support the installation of packages as a normal user.
+
+### Ubuntu
+```
+$ apt update && apt upgrade
+$ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
+$ pip2 install -U setuptools pip
+$ pip2 install Cython
+$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+```
 ### Debian 
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
-$ pip install -U setuptools pip
-$ pip install Cython
-$ pip install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip2 install -U setuptools pip
+$ pip2 install Cython
+$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 ### Fedora/RedHat
 ```
 $ yum update
 $ yum install python-pip python-devel libusb-devel libudev-devel \
               gcc redhat-rpm-config
-$ pip install -U setuptools pip
-$ pip install Cython
-$ pip install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip2 install -U setuptools pip
+$ pip2 install Cython
+$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+```
+### OpenSUSE
+```
+$ zypper install python-pip python-devel libusb-1_0-devel libudev-devel
+$ pip2 install Cython
+$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 
 ## Getting started
@@ -101,3 +120,4 @@ to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote 
 	2 1 4
 	
 *Enter the shown challenge code on OnlyKey, 2-1-4*
+
