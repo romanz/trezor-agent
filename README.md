@@ -8,8 +8,9 @@ The project started from a fork [trezor-agent](https://github.com/romanz/trezor-
 
 ## Installation
 
-
 You will probably need to run these commands as root (e.g. with `sudo`), unless you have changed your system configuration to support the installation of packages as a normal user.
+
+
 
 ### Ubuntu
 ```
@@ -20,7 +21,7 @@ $ pip2 install Cython
 $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
-### Debian 
+### Debian
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
@@ -53,11 +54,40 @@ In order for non-root users in Linux to be able to communicate with OnlyKey a ud
 
 ### Create Private Key
 
-Currently the Onlykey SSH Agent supports ED25519 keys. A new key may be generated as follows:
+Currently the Onlykey SSH Agent supports ED25519 or NIST P-256 keys.
 
-	$ openssl list -public-key-algorithms | grep X25519
+#### Create Private Key on OnlyKey (Recommended)
 
-You should see something like this: 
+A new key may be generated on OnlyKey as follows:
+
+To create a new ED25519 SSH key (Default):
+
+$ onlykey-agent test@hostname.com --slot 1 -v -g
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
+
+To create a new NIST P-256 SSH key:
+
+$ onlykey-agent test@hostname.com --slot 1 -v -g -e nist256p1
+ecdsa-sha2-nistp256 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
+
+Append the output from this command i.e.
+
+`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com`
+
+to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote server would allow you to login using the corresponding private key signature.
+
+#### Create Private Key using OpenSSL
+
+First make sure you have OpenSSL version 1.1.0 or later. Check the version by running 'openssl version'
+
+Here is a guide to installing OpenSSL version 1.1.0 or later if you do not have it
+[OpenSSL Install Help](https://github.com/trustcrypto/onlykey-agent/blob/master/OPENSSL.md)
+
+A new key may be generated offline as follows:
+
+$ openssl list -public-key-algorithms | grep X25519
+
+You should see something like this:
 Name: OpenSSL X25519 algorithm
 	OID: X25519
 	PEM string: X25519
@@ -79,7 +109,7 @@ Open the OnlyKey app and select the Keys tab.
 Follow the onscreen instructions to put OnlyKey into config mode.
 
 Once OnlyKey is in config mode (Flashing Red):
-- Select Type 
+- Select Type
 - Select desired Slot
 - Paste the key you copied in into the Key field
 - Select “Set as signature key” and “Set as authentication key”
@@ -96,13 +126,13 @@ Once this is complete be sure to delete the key you created (X25519.key) or stor
 	2017-09-19 00:19:46,175 INFO         getting public key (ed25519) from OnlyKey...                                   
 	ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
 	2017-09-19 00:19:47,180 INFO         disconnected from OnlyKey   
-	
+
 **Run**
 
 	$ onlykey-agent test@hostname.com --slot 1
 	ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
-		
-Append the output from this command i.e. 
+
+Append the output from this command i.e.
 
 `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com`
 
@@ -118,6 +148,5 @@ to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote 
 	2017-09-19 00:15:30,942 INFO         please confirm user "test" login to "test@hostname.com" using OnlyKey         
 	2017-09-19 00:15:30,946 INFO         Please enter the 3 digit challenge code on OnlyKey (and press ENTER if necessary)                    
 	2 1 4
-	
-*Enter the shown challenge code on OnlyKey, 2-1-4*
 
+*Enter the shown challenge code on OnlyKey, 2-1-4*
