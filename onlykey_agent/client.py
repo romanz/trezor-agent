@@ -88,10 +88,10 @@ class Client(object):
         log.info('generating private key on %s...', self.device_name)
         if self.curve == formats.CURVE_ED25519:
             """ED25519 with authentication flag"""
-            ecc_type = 17
+            ecc_type = 65
         else:
             """P256 with authentication flag"""
-            ecc_type = 18
+            ecc_type = 66
 
         self.ok.set_ecc_key(self.slot, ecc_type, chr(0))
         time.sleep(.5)
