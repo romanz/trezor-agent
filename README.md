@@ -60,6 +60,8 @@ Currently the Onlykey SSH Agent supports ED25519 or NIST P-256 keys.
 
 A new key may be generated on OnlyKey as follows:
 
+First make sure your OnlyKey is in config mode by holding the 6 button down for 5 or more seconds and then re-entering your PIN.
+
 To create a new ED25519 SSH key (Default):
 
 `$ onlykey-agent test@hostname.com --slot 1 -v -g`
