@@ -62,12 +62,14 @@ A new key may be generated on OnlyKey as follows:
 
 To create a new ED25519 SSH key (Default):
 
-$ onlykey-agent test@hostname.com --slot 1 -v -g
+`$ onlykey-agent test@hostname.com --slot 1 -v -g`
+
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
 
 To create a new NIST P-256 SSH key:
 
-$ onlykey-agent test@hostname.com --slot 1 -v -g -e nist256p1
+`$ onlykey-agent test@hostname.com --slot 1 -v -g -e nist256p1`
+
 ecdsa-sha2-nistp256 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
 
 Append the output from this command i.e.
