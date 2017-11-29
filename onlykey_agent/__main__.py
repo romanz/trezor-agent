@@ -35,7 +35,7 @@ def create_parser():
     p.add_argument('--slot', default='1', action='store',
                    help='Set the OnlyKey ECC key slot (1-32), defaults to 1.')
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
-                   default=formats.CURVE_ED25519,
+                   default=formats.CURVE_NIST256,
                    help='specify ECDSA curve name: ' + curve_names)
     p.add_argument('--timeout',
                    default=server.UNIX_SOCKET_TIMEOUT, type=float,

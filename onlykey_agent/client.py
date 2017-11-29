@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 class Client(object):
     """Client wrapper for SSH authentication device."""
 
-    def __init__(self, curve=formats.CURVE_ED25519, slot='1'):
+    def __init__(self, curve=formats.CURVE_NIST256, slot='1'):
         """Connect to hardware device."""
         self.device_name = 'OnlyKey'
         self.ok = OnlyKey()

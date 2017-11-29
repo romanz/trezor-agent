@@ -3,10 +3,10 @@ from setuptools import setup
 
 setup(
     name='onlykey_agent',
-    version='0.0.1',
+    version='0.0.2',
     description='Using OnlyKey as hardware SSH agent',
-    author='Thomas Sileo',
-    author_email='t@a4.io',
+    author='CryptoTrust',
+    author_email='admin@crp.to',
     url='http://github.com/trustcrypto/onlykey-agent',
     packages=['onlykey_agent'],
     install_requires=['ecdsa>=0.13', 'ed25519>=1.4', 'Cython>=0.23.4', 'protobuf>=2.6.1', 'semver>=2.2'],
