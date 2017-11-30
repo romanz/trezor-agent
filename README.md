@@ -10,7 +10,14 @@ The project started from a fork [trezor-agent](https://github.com/romanz/trezor-
 
 You will probably need to run these commands as root (e.g. with `sudo`), unless you have changed your system configuration to support the installation of packages as a normal user.
 
-
+### MacOS
+Brew is required. To install visit https://brew.sh/
+```
+$ brew update && brew upgrade
+$ brew install python
+$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+```
 
 ### Ubuntu
 ```
