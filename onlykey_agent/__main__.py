@@ -32,7 +32,7 @@ def create_parser():
 
     curve_names = [name for name in formats.SUPPORTED_CURVES]
     curve_names = ', '.join(sorted(curve_names))
-    p.add_argument('--slot', default='1', action='store',
+    p.add_argument('--slot', default='32', action='store',
                    help='Set the OnlyKey ECC key slot (1-32), defaults to 1.')
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
                    default=formats.CURVE_NIST256,

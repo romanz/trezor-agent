@@ -62,7 +62,7 @@ class Client(object):
 
         log.info('received= %s', repr(ok_pubkey1))
 
-        log.info('Trying to read the public key part 2...')
+        log.info('Trying to read the public key...')
         for _ in xrange(2):
             ok_pubkey2 = self.ok.read_bytes(64, to_str=True, timeout_ms=10)
             if len(ok_pubkey2) == 64:
@@ -102,7 +102,7 @@ class Client(object):
 
         log.info('received= %s', repr(ok_pubkey1))
 
-        log.info('Trying to read the public key part 2...')
+        log.info('Trying to read the public key...')
         for _ in xrange(2):
             ok_pubkey2 = self.ok.read_bytes(64, to_str=True, timeout_ms=10)
             if len(ok_pubkey2) == 64:

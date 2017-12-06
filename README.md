@@ -6,11 +6,36 @@ The project started from a fork [trezor-agent](https://github.com/romanz/trezor-
 
 **Still in early development.**
 
-## Installation
+## SSH Agent Quickstart Guide
 
-You will probably need to run these commands as root (e.g. with `sudo`), unless you have changed your system configuration to support the installation of packages as a normal user.
+1) Install OnlyKey agent on your client machine:
 
-### MacOS
+$ sudo pip2 install git+git://github.com/trustcrypto/python-onlykey.git
+$ sudo pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+
+2) Generate public key using onlykey-agent:
+
+$ onlykey-agent user@example.com
+
+3) Log in to your server as usual and copy the row containing the output from the previous step into ~/.ssh/authorized_keys file on your server
+
+i.e.
+
+`ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFwsFGFI7px8toa38FVeBIKcYdBvWzYXAiVcbB2d1o3zEsRB6Lm/ZuCzQjaLwQdcpT1aF8tycqt4K6AGI1o+qFk= user@example.com`
+
+4) From now on you can log in to your server using OnlyKey using the following command:
+
+$ onlykey-agent -c user@example.com
+
+
+5) This method can also be used for git push or other mechanisms that are using SSH as their communication protocol:
+
+$ onlykey-agent user@example.com git push
+
+
+## SSH Agent Advanced Topics
+
+### MacOS Install with dependencies
 Brew is required. To install visit https://brew.sh/
 ```
 $ brew update && brew upgrade
@@ -19,7 +44,7 @@ $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 
-### Ubuntu
+### Ubuntu Install with dependencies
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
@@ -28,7 +53,8 @@ $ pip2 install Cython
 $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
-### Debian
+
+### Debian Install with dependencies
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
@@ -37,7 +63,8 @@ $ pip2 install Cython
 $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
-### Fedora/RedHat
+
+### Fedora/RedHat/CentOS Install with dependencies
 ```
 $ yum update
 $ yum install python-pip python-devel libusb-devel libudev-devel \
@@ -47,7 +74,7 @@ $ pip2 install Cython
 $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
-### OpenSUSE
+### OpenSUSE Install with dependencies
 ```
 $ zypper install python-pip python-devel libusb-1_0-devel libudev-devel
 $ pip2 install Cython
@@ -55,37 +82,29 @@ $ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
 $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 ```
 
-## Getting started
+### Linux UDEV Rule
 
 In order for non-root users in Linux to be able to communicate with OnlyKey a udev rule must be created as described [here](https://www.pjrc.com/teensy/td_download.html).
 
-### Create Private Key
+### Create New Private Key
 
-Currently the Onlykey SSH Agent supports ED25519 or NIST P-256 keys.
+Currently the Onlykey SSH Agent supports ED25519 or NIST P-256 keys. A default key is created automatically in slot # 32. You can use different private keys for different servers, OnlyKey supports up to 32 ECC keys.
 
-#### Create Private Key on OnlyKey (Recommended)
+WARNING - Generating keys overwrites any existing keys.
+
+#### Create New Private Key on OnlyKey
 
 A new key may be generated on OnlyKey as follows:
 
 First make sure your OnlyKey is in config mode by holding the 6 button down for 5 or more seconds and then re-entering your PIN.
 
-To create a new ED25519 SSH key (Default):
+To create a new NIST P-256 key in slot 1:
 
-`$ onlykey-agent test@hostname.com --slot 1 -v -g`
+`$ onlykey-agent test@hostname.com --slot 1 -g`
 
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
+To create a new ED25519 key in slot 1:
 
-To create a new NIST P-256 SSH key:
-
-`$ onlykey-agent test@hostname.com --slot 1 -v -g -e nist256p1`
-
-ecdsa-sha2-nistp256 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com
-
-Append the output from this command i.e.
-
-`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMcB8Fu1LYxIrFwbRNoc7J7mkVF4VDrJKZO/1dG2Iwb test@hostname.com`
-
-to `~/.ssh/authorized_keys` configuration file at `hostname.com`, so the remote server would allow you to login using the corresponding private key signature.
+`$ onlykey-agent test@hostname.com --slot 1 -g ssh-ed25519`
 
 #### Create Private Key using OpenSSL
 
