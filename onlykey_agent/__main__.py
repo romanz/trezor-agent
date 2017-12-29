@@ -32,8 +32,6 @@ def create_parser():
 
     curve_names = [name for name in formats.SUPPORTED_CURVES]
     curve_names = ', '.join(sorted(curve_names))
-    p.add_argument('--slot', default='32', action='store',
-                   help='Set the OnlyKey ECC key slot (1-32), defaults to 1.')
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
                    default=formats.CURVE_NIST256,
                    help='specify ECDSA curve name: ' + curve_names)
@@ -54,9 +52,6 @@ def create_agent_parser():
                    help='run ${SHELL} as subprocess under SSH agent')
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
-    g.add_argument('-g', '--generate', default=False, action='store_true',
-                   help='generate a new SSH Private Key on OnlyKey')
-
     p.add_argument('identity', type=str, default=None,
                    help='proto://[user@]host[:port][/path]')
     p.add_argument('command', type=str, nargs='*', metavar='ARGUMENT',
@@ -138,14 +133,9 @@ def run_agent(client_factory=client.Client):
     args = create_agent_parser().parse_args()
     setup_logging(verbosity=args.verbose)
 
-    with client_factory(curve=args.ecdsa_curve_name, slot=args.slot) as conn:
+    with client_factory(curve=args.ecdsa_curve_name) as conn:
         label = args.identity
         command = args.command
-
-        if args.generate:
-            public_key = conn.generate_private_key(label=label)
-            sys.stdout.write(public_key)
-            return
 
         public_key = conn.get_public_key(label=label)
 

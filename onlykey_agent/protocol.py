@@ -103,6 +103,7 @@ class Handler(object):
         reply = method(buf=buf)
         debug_reply = ': {!r}'.format(reply) if self.debug else ''
         log.debug('reply: %d bytes%s', len(reply), debug_reply)
+        log.info('reply: ', repr(reply))
         return reply
 
     def list_pubs(self, buf):
@@ -122,7 +123,7 @@ class Handler(object):
         SSH v2 public key authentication is performed.
 
         If the required key is not supported, raise KeyError
-        If the signature is invalid, rause ValueError
+        If the signature is invalid, raise ValueError
         """
         key = formats.parse_pubkey(util.read_frame(buf))
         log.debug('looking for %s', key['fingerprint'])

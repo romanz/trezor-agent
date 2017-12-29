@@ -43,6 +43,14 @@ def read_frame(conn):
     """Read size-prefixed frame from connection."""
     size, = recv(conn, '>L')
     return recv(conn, size)
+    
+
+def bytes2num(s):
+    """Convert MSB-first bytes to an unsigned integer."""
+    res = 0
+    for i, c in enumerate(reversed(bytearray(s))):
+        res += c << (i * 8)
+    return res
 
 
 def num2bytes(value, size):
