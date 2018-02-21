@@ -33,7 +33,12 @@ def export_public_key(device_type, args):
     log.warning('NOTE: in order to re-generate the exact same GPG key later, '
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
-    c = client.Client(device=device_type())
+    config = {}
+    if args.pinentry:
+        config['pinentry-program'] = args.pinentry
+    if args.passentry:
+        config['passphrase-program'] = args.passentry
+    c = client.Client(device=device_type(config=config))
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
     verifying_key = c.pubkey(identity=identity, ecdh=False)
@@ -151,10 +156,15 @@ default-key \"{1}\"
 
     # Prepare GPG agent configuration file
     with open(os.path.join(homedir, 'gpg-agent.conf'), 'w') as f:
-        f.write("""# Hardware-based GPG agent emulator
+        lines = """# Hardware-based GPG agent emulator
 log-file {0}/gpg-agent.log
 verbosity 2
-""".format(homedir))
+""".format(homedir)
+        if args.pinentry:
+            lines += 'pinentry-program {}\n'.format(args.pinentry)
+        if args.passentry:
+            lines += 'passentry-program {}\n'.format(args.passentry)
+        f.write(lines)
 
     # Prepare a helper script for setting up the new identity
     with open(os.path.join(homedir, 'env'), 'w') as f:
@@ -219,7 +229,8 @@ def run_agent(device_type):
         env = {'GNUPGHOME': args.homedir}
         sock_path = keyring.get_agent_sock_path(env=env)
         pubkey_bytes = keyring.export_public_keys(env=env)
-        handler = agent.Handler(device=device_type(), pubkey_bytes=pubkey_bytes)
+        handler = agent.Handler(device=device_type(config=config),
+                                pubkey_bytes=pubkey_bytes)
         with server.unix_domain_socket_server(sock_path) as sock:
             for conn in agent.yield_connections(sock):
                 with contextlib.closing(conn):
@@ -255,6 +266,8 @@ def main(device_type):
     p.add_argument('-t', '--time', type=int, default=int(time.time()))
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('-s', '--subkey', default=False, action='store_true')
+    p.add_argument('-p', '--pinentry')
+    p.add_argument('-pa', '--passentry')
     p.set_defaults(func=run_init)
 
     p = subparsers.add_parser('unlock', help='unlock the hardware device')

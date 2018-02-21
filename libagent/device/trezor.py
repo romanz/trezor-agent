@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+import traceback
 
 import mnemonic
 import semver
@@ -12,6 +13,10 @@ import semver
 from . import interface
 
 log = logging.getLogger(__name__)
+
+
+class UserCancelException(RuntimeError):
+    pass
 
 
 def _message_box(label, sp=subprocess):
@@ -32,6 +37,61 @@ def _is_open_tty(stream):
     return not stream.closed and os.isatty(stream.fileno())
 
 
+def _pin_communicate(self, program, message, error=None, options={}):
+    args = [program]
+    if 'DISPLAY' in os.environ:
+        args.extend(['--display', os.environ['DISPLAY']])
+    try:
+        entry = subprocess.Popen(
+            args,
+            encoding='utf-8',
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        )
+    except OSError as e:
+        if e.errno == os.errno.ENOENT:
+            return None
+        else:
+            raise
+
+    def expect(prefix=None):
+        line = entry.stdout.readline()
+        if line.endswith('\n'):
+            line = line[:-1]
+        log.debug('PINENTRY <- {}'.format(line))
+        if line.startswith('ERR '):
+            raise UserCancelException()
+        if prefix and not line.startswith(prefix):
+            raise RuntimeError('Received unexpected response from pinentry')
+        return line[len(prefix) if prefix else 0:]
+
+    def send(line):
+        log.debug('PINENTRY -> {}'.format(line))
+        entry.stdin.write('{}\n'.format(line))
+        entry.stdin.flush()
+
+    expect('OK')
+    for k, v in options.items():
+        if v is not None:
+            send('OPTION {}={}'.format(k, v))
+        else:
+            send('OPTION {}'.format(k))
+        expect('OK')
+    send('SETDESC {}'.format(message))
+    expect('OK')
+    if error:
+        send('SETERROR {}'.format(error))
+        expect('OK')
+    send('GETPIN')
+    result = expect('D ')
+    send('BYE')
+    entry.stdin.close()
+    try:
+        entry.communicate()
+    except:
+        pass
+    return result
+
+
 class Trezor(interface.Device):
     """Connection to TREZOR device."""
 
@@ -39,6 +99,11 @@ class Trezor(interface.Device):
     def package_name(cls):
         """Python package name (at PyPI)."""
         return 'trezor-agent'
+
+    def __init__(self, config=None):
+        self.config = config or {}
+        self.options = {}
+        super(Trezor, self).__init__(config=config)
 
     @property
     def _defs(self):
@@ -57,20 +122,33 @@ class Trezor(interface.Device):
         cli_handler = conn.callback_PinMatrixRequest
 
         def new_handler(msg):
-            if _is_open_tty(sys.stdin):
-                result = cli_handler(msg)  # CLI-based PIN handler
-            else:
-                scrambled_pin = _message_box(
-                    'Use the numeric keypad to describe number positions.\n'
-                    'The layout is:\n'
-                    '    7 8 9\n'
-                    '    4 5 6\n'
-                    '    1 2 3\n'
-                    'Please enter PIN:')
+            fallback_message = (
+                'Use the numeric keypad to describe number positions.\n'
+                'The layout is:\n'
+                '    7 8 9\n'
+                '    4 5 6\n'
+                '    1 2 3\n'
+                'Please enter PIN:')
+            result = None
+            pinentry_program = self.config.get('pinentry-program')
+            scrambled_pin = _pin_communicate(
+                self,
+                pinentry_program or 'pinentry',
+                'Please enter your Trezor PIN' if pinentry_program
+                else fallback_message,
+                options=self.options,
+            )
+            if not scrambled_pin:
+                if _is_open_tty(sys.stdin):
+                    result = cli_handler(msg)  # CLI-based PIN handler
+                else:
+                    scrambled_pin = _message_box(fallback_message)
+            if not result:
+                if not set(scrambled_pin).issubset('123456789'):
+                    raise self._defs.PinException(
+                        None,
+                        'Invalid scrambled PIN: {!r}'.format(scrambled_pin))
                 result = self._defs.PinMatrixAck(pin=scrambled_pin)
-            if not set(result.pin).issubset('123456789'):
-                raise self._defs.PinException(
-                    None, 'Invalid scrambled PIN: {!r}'.format(result.pin))
             return result
 
         conn.callback_PinMatrixRequest = new_handler
@@ -85,14 +163,24 @@ class Trezor(interface.Device):
                 log.debug('re-using cached %s passphrase', self)
                 return self.__class__.cached_passphrase_ack
 
-            if _is_open_tty(sys.stdin):
-                # use CLI-based PIN handler
-                ack = cli_handler(msg)
-            else:
-                passphrase = _message_box('Please enter passphrase:')
-                passphrase = mnemonic.Mnemonic.normalize_string(passphrase)
-                ack = self._defs.PassphraseAck(passphrase=passphrase)
+            ack = None
+            passphrase_program = self.config.get('passphrase-program')
+            passphrase = _pin_communicate(
+                self,
+                passphrase_program or 'pinentry',
+                'Please enter your passphrase',
+                options=self.options,
+            )
+            if not passphrase:
+                if _is_open_tty(sys.stdin):
+                    # use CLI-based PIN handler
+                    ack = cli_handler(msg)
+                else:
+                    passphrase = _message_box('Please enter passphrase:')
+                    passphrase = mnemonic.Mnemonic.normalize_string(passphrase)
 
+            if not ack:
+                ack = self._defs.PassphraseAck(passphrase=passphrase)
             self.__class__.cached_passphrase_ack = ack
             return ack
 
@@ -130,10 +218,12 @@ class Trezor(interface.Device):
                 except (self._defs.PinException, ValueError) as e:
                     log.error('Invalid PIN: %s, retrying...', e)
                     continue
+                except UserCancelException:
+                    connection.cancel()
+                    return None
                 except Exception as e:
                     log.exception('ping failed: %s', e)
                     connection.close()  # so the next HID open() will succeed
-                    raise
 
         raise interface.NotFoundError('{} not connected'.format(self))
 
@@ -141,8 +231,9 @@ class Trezor(interface.Device):
         """Close connection."""
         self.conn.close()
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Return public key."""
+        self.options = options
         curve_name = identity.get_curve_name(ecdh=ecdh)
         log.debug('"%s" getting public key (%s) from %s',
                   identity.to_string(), curve_name, self)
@@ -158,8 +249,9 @@ class Trezor(interface.Device):
             setattr(result, name, value)
         return result
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, options=None):
         """Sign given blob and return the signature (as bytes)."""
+        self.options = options
         curve_name = identity.get_curve_name(ecdh=False)
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
@@ -178,8 +270,9 @@ class Trezor(interface.Device):
             log.debug(msg, exc_info=True)
             raise interface.DeviceError(msg)
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
+        self.options = options
         curve_name = identity.get_curve_name(ecdh=True)
         log.debug('"%s" shared session key (%s) for %r from %s',
                   identity.to_string(), curve_name, pubkey, self)

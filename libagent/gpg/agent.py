@@ -91,10 +91,11 @@ class Handler(object):
         self.pubkey_bytes = pubkey_bytes
         # "Clone" existing GPG version
         self.version = keyring.gpg_version()
+        self.options = {}
 
         self.handlers = {
             b'RESET': None,
-            b'OPTION': None,
+            b'OPTION': lambda _, args: self.set_option(args),
             b'SETKEYDESC': None,
             b'NOP': None,
             b'GETINFO': lambda conn, _: keyring.sendline(conn, b'D ' + self.version),
@@ -108,6 +109,15 @@ class Handler(object):
             b'KEYINFO': _key_info,
             b'SCD': self.handle_scd,
         }
+
+    def set_option(self, args):
+        parts = args[0].decode('utf-8').split('=', 1)
+        i = iter(parts)
+        k = next(i, None)
+        if not k:
+            return
+        v = next(i, None)
+        self.options[k] = v
 
     def handle_scd(self, conn, args):
         """No support for smart-card device protocol."""
@@ -133,8 +143,11 @@ class Handler(object):
         curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
         ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
 
-        identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-        verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
+        identity = client.create_identity(user_id=user_id,
+                                          curve_name=curve_name)
+        verifying_key = self.client.pubkey(identity=identity,
+                                           ecdh=ecdh,
+                                           options=self.options)
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
             verifying_key=verifying_key, ecdh=ecdh)
@@ -147,7 +160,8 @@ class Handler(object):
         log.debug('signing %r digest (algo #%s)', self.digest, self.algo)
         identity = self.get_identity(keygrip=self.keygrip)
         r, s = self.client.sign(identity=identity,
-                                digest=binascii.unhexlify(self.digest))
+                                digest=binascii.unhexlify(self.digest),
+                                options=self.options)
         result = sig_encode(r, s)
         log.debug('result: %r', result)
         keyring.sendline(conn, b'D ' + result)
@@ -162,7 +176,9 @@ class Handler(object):
         remote_pubkey = parse_ecdh(line)
 
         identity = self.get_identity(keygrip=self.keygrip)
-        ec_point = self.client.ecdh(identity=identity, pubkey=remote_pubkey)
+        ec_point = self.client.ecdh(identity=identity,
+                                    pubkey=remote_pubkey,
+                                    options=self.options)
         keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
 
     @util.memoize
