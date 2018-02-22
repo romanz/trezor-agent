@@ -164,7 +164,7 @@ class Trezor(interface.Device):
                 return self.__class__.cached_passphrase_ack
 
             ack = None
-            passphrase_program = self.config.get('passphrase-program')
+            passphrase_program = self.config.get('passentry-program')
             passphrase = _pin_communicate(
                 self,
                 passphrase_program or 'pinentry',

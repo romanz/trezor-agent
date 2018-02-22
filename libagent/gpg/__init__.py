@@ -37,7 +37,7 @@ def export_public_key(device_type, args):
     if args.pinentry:
         config['pinentry-program'] = args.pinentry
     if args.passentry:
-        config['passphrase-program'] = args.passentry
+        config['passentry-program'] = args.passentry
     c = client.Client(device=device_type(config=config))
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
