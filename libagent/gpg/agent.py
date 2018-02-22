@@ -79,6 +79,7 @@ class AgentStop(Exception):
 
 class Handler(object):
     """GPG agent requests' handler."""
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self, device, pubkey_bytes):
         """C-tor."""

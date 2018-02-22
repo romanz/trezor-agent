@@ -215,6 +215,7 @@ def _dummy_context():
 def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     args = create_agent_parser(device_type=device_type).parse_args()
+    config = util.parse_config()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
     public_keys = None
@@ -255,7 +256,7 @@ def main(device_type):
         sys.stdin.close()
 
     conn = JustInTimeConnection(
-        conn_factory=lambda: client.Client(device_type()),
+        conn_factory=lambda: client.Client(device_type(config=config)),
         identities=identities, public_keys=public_keys)
 
     if command or args.daemonize:

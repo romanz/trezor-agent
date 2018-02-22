@@ -5,6 +5,7 @@ import functools
 import io
 import logging
 import struct
+import os
 
 log = logging.getLogger(__name__)
 
@@ -229,3 +230,13 @@ def which(cmd):
         raise OSError('Cannot find {!r} in $PATH'.format(cmd))
     log.debug('which %r => %r', cmd, full_path)
     return full_path
+
+
+def parse_config(homedir=None):
+    if not homedir:
+        homedir = os.environ.get('GNUPGHOME')
+    config_file = os.path.join(homedir, 'gpg-agent.conf')
+    with open(config_file, 'r') as source:
+        lines = (line.strip() for line in source)
+    lines = (line for line in lines if line and not line.startswith('#'))
+    return dict(line.split(' ', 1) for line in lines)
