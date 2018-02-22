@@ -5,7 +5,6 @@ import logging
 import os
 import subprocess
 import sys
-import traceback
 
 import mnemonic
 import semver
@@ -13,10 +12,6 @@ import semver
 from . import interface
 
 log = logging.getLogger(__name__)
-
-
-class UserCancelException(RuntimeError):
-    pass
 
 
 def _message_box(label, sp=subprocess):
@@ -37,14 +32,14 @@ def _is_open_tty(stream):
     return not stream.closed and os.isatty(stream.fileno())
 
 
-def _pin_communicate(self, program, message, error=None, options={}):
+def _pin_communicate(program, message, error=None, options=None):
     args = [program]
+    options = options or {}
     if 'DISPLAY' in os.environ:
         args.extend(['--display', os.environ['DISPLAY']])
     try:
         entry = subprocess.Popen(
             args,
-            encoding='utf-8',
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         )
     except OSError as e:
@@ -54,19 +49,19 @@ def _pin_communicate(self, program, message, error=None, options={}):
             raise
 
     def expect(prefix=None):
-        line = entry.stdout.readline()
+        line = entry.stdout.readline().decode('utf-8')
         if line.endswith('\n'):
             line = line[:-1]
-        log.debug('PINENTRY <- {}'.format(line))
+        log.debug('PINENTRY <- %s', line)
         if line.startswith('ERR '):
-            raise UserCancelException()
+            raise RuntimeError(line)
         if prefix and not line.startswith(prefix):
             raise RuntimeError('Received unexpected response from pinentry')
         return line[len(prefix) if prefix else 0:]
 
     def send(line):
-        log.debug('PINENTRY -> {}'.format(line))
-        entry.stdin.write('{}\n'.format(line))
+        log.debug('PINENTRY -> %s', line)
+        entry.stdin.write('{}\n'.format(line).encode('utf-8'))
         entry.stdin.flush()
 
     expect('OK')
@@ -87,7 +82,7 @@ def _pin_communicate(self, program, message, error=None, options={}):
     entry.stdin.close()
     try:
         entry.communicate()
-    except:
+    except Exception:
         pass
     return result
 
@@ -101,6 +96,7 @@ class Trezor(interface.Device):
         return 'trezor-agent'
 
     def __init__(self, config=None):
+        """Set up Trezor device object."""
         self.config = config or {}
         self.options = {}
         super(Trezor, self).__init__(config=config)
@@ -132,7 +128,6 @@ class Trezor(interface.Device):
             result = None
             pinentry_program = self.config.get('pinentry-program')
             scrambled_pin = _pin_communicate(
-                self,
                 pinentry_program or 'pinentry',
                 'Please enter your Trezor PIN' if pinentry_program
                 else fallback_message,
@@ -166,7 +161,6 @@ class Trezor(interface.Device):
             ack = None
             passphrase_program = self.config.get('passentry-program')
             passphrase = _pin_communicate(
-                self,
                 passphrase_program or 'pinentry',
                 'Please enter your passphrase',
                 options=self.options,
@@ -218,9 +212,6 @@ class Trezor(interface.Device):
                 except (self._defs.PinException, ValueError) as e:
                     log.error('Invalid PIN: %s, retrying...', e)
                     continue
-                except UserCancelException:
-                    connection.cancel()
-                    return None
                 except Exception as e:
                     log.exception('ping failed: %s', e)
                     connection.close()  # so the next HID open() will succeed

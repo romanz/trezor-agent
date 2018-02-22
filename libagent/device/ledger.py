@@ -41,10 +41,6 @@ class LedgerNanoS(interface.Device):
         """Python package name (at PyPI)."""
         return 'ledger-agent'
 
-    def __init__(self, config=None):
-        self.config = config
-        super(LedgerNanoS, self).__init__(config=config)
-
     def connect(self):
         """Enumerate and connect to the first USB HID interface."""
         try:

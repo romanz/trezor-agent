@@ -111,6 +111,7 @@ class Handler(object):
         }
 
     def set_option(self, args):
+        """Store options passed to the agent."""
         parts = args[0].decode('utf-8').split('=', 1)
         i = iter(parts)
         k = next(i, None)
