@@ -82,7 +82,7 @@ def _pin_communicate(program, message, error=None, options=None):
     entry.stdin.close()
     try:
         entry.communicate()
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         pass
     return result
 
@@ -220,7 +220,7 @@ class Trezor(interface.Device):
                 except (self._defs.PinException, ValueError) as e:
                     log.error('Invalid PIN: %s, retrying...', e)
                     continue
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     log.exception('ping failed: %s', e)
                     connection.close()  # so the next HID open() will succeed
 

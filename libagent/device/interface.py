@@ -105,7 +105,7 @@ class Identity(object):
 class Device(object):
     """Abstract cryptographic hardware device interface."""
 
-    def __init__(self, config=None):
+    def __init__(self, config=None):  # pylint: disable=unused-argument
         """C-tor."""
         self.conn = None
 
