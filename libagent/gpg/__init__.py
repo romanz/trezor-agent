@@ -262,8 +262,8 @@ def main(device_type):
     p.add_argument('-t', '--time', type=int, default=int(time.time()))
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('-s', '--subkey', default=False, action='store_true')
-    p.add_argument('-p', '--pinentry')
-    p.add_argument('-pa', '--passentry')
+    p.add_argument('--pinentry')
+    p.add_argument('--passentry')
     p.set_defaults(func=run_init)
 
     p = subparsers.add_parser('unlock', help='unlock the hardware device')
