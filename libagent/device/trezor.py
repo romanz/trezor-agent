@@ -118,33 +118,37 @@ class Trezor(interface.Device):
         cli_handler = conn.callback_PinMatrixRequest
 
         def new_handler(msg):
-            fallback_message = (
-                'Use the numeric keypad to describe number positions.\n'
-                'The layout is:\n'
-                '    7 8 9\n'
-                '    4 5 6\n'
-                '    1 2 3\n'
-                'Please enter PIN:')
-            result = None
-            pinentry_program = self.config.get('pinentry-program')
-            scrambled_pin = _pin_communicate(
-                pinentry_program or 'pinentry',
-                'Please enter your Trezor PIN' if pinentry_program
-                else fallback_message,
-                options=self.options,
-            )
-            if not scrambled_pin:
-                if _is_open_tty(sys.stdin):
-                    result = cli_handler(msg)  # CLI-based PIN handler
-                else:
-                    scrambled_pin = _message_box(fallback_message)
-            if not result:
-                if not set(scrambled_pin).issubset('123456789'):
-                    raise self._defs.PinException(
-                        None,
-                        'Invalid scrambled PIN: {!r}'.format(scrambled_pin))
-                result = self._defs.PinMatrixAck(pin=scrambled_pin)
-            return result
+            try:
+                fallback_message = (
+                    'Use the numeric keypad to describe number positions.\n'
+                    'The layout is:\n'
+                    '    7 8 9\n'
+                    '    4 5 6\n'
+                    '    1 2 3\n'
+                    'Please enter PIN:')
+                result = None
+                pinentry_program = self.config.get('pinentry-program')
+                scrambled_pin = _pin_communicate(
+                    pinentry_program or 'pinentry',
+                    'Please enter your Trezor PIN' if pinentry_program
+                    else fallback_message,
+                    options=self.options,
+                )
+                if not scrambled_pin:
+                    if _is_open_tty(sys.stdin):
+                        result = cli_handler(msg)  # CLI-based PIN handler
+                    else:
+                        scrambled_pin = _message_box(fallback_message)
+                if not result:
+                    if not set(scrambled_pin).issubset('123456789'):
+                        raise self._defs.PinException(
+                            None,
+                            'Invalid scrambled PIN: {!r}'.format(scrambled_pin))
+                    result = self._defs.PinMatrixAck(pin=scrambled_pin)
+                return result
+            except:  # noqa
+                conn.init_device()
+                raise
 
         conn.callback_PinMatrixRequest = new_handler
 
@@ -154,29 +158,33 @@ class Trezor(interface.Device):
         cli_handler = conn.callback_PassphraseRequest
 
         def new_handler(msg):
-            if self.__class__.cached_passphrase_ack:
-                log.debug('re-using cached %s passphrase', self)
-                return self.__class__.cached_passphrase_ack
+            try:
+                if self.__class__.cached_passphrase_ack:
+                    log.debug('re-using cached %s passphrase', self)
+                    return self.__class__.cached_passphrase_ack
 
-            ack = None
-            passphrase_program = self.config.get('passentry-program')
-            passphrase = _pin_communicate(
-                passphrase_program or 'pinentry',
-                'Please enter your passphrase',
-                options=self.options,
-            )
-            if not passphrase:
-                if _is_open_tty(sys.stdin):
-                    # use CLI-based PIN handler
-                    ack = cli_handler(msg)
-                else:
-                    passphrase = _message_box('Please enter passphrase:')
-                    passphrase = mnemonic.Mnemonic.normalize_string(passphrase)
+                ack = None
+                passphrase_program = self.config.get('passentry-program')
+                passphrase = _pin_communicate(
+                    passphrase_program or 'pinentry',
+                    'Please enter your passphrase',
+                    options=self.options,
+                )
+                if not passphrase:
+                    if _is_open_tty(sys.stdin):
+                        # use CLI-based PIN handler
+                        ack = cli_handler(msg)
+                    else:
+                        passphrase = _message_box('Please enter passphrase:')
+                        passphrase = mnemonic.Mnemonic.normalize_string(passphrase)
 
-            if not ack:
-                ack = self._defs.PassphraseAck(passphrase=passphrase)
-            self.__class__.cached_passphrase_ack = ack
-            return ack
+                if not ack:
+                    ack = self._defs.PassphraseAck(passphrase=passphrase)
+                self.__class__.cached_passphrase_ack = ack
+                return ack
+            except:  # noqa
+                conn.init_device()
+                raise
 
         conn.callback_PassphraseRequest = new_handler
 
