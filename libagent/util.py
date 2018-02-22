@@ -233,6 +233,7 @@ def which(cmd):
 
 
 def parse_config(homedir=None):
+    """Load the gpg-agent config."""
     if not homedir:
         homedir = os.environ.get('GNUPGHOME')
     config_file = os.path.join(homedir, 'gpg-agent.conf')
