@@ -100,6 +100,10 @@ def create_agent_parser(device_type):
                    help='proto://[user@]host[:port][/path]')
     p.add_argument('command', type=str, nargs='*', metavar='ARGUMENT',
                    help='command to run under the SSH agent')
+    p.add_argument('--pinentry', help='Configure a GPG PINENTRY program')
+    p.add_argument('--passentry',
+                   help=('Configure a GPG PINENTRY program for passphrase '
+                         'entry'))
     return p
 
 
@@ -255,10 +259,11 @@ def main(device_type):
         command = os.environ['SHELL']
         sys.stdin.close()
 
-    config = {
-        'pinentry-program': args.pinentry,
-        'passentry-program': args.passentry,
-    }
+    config = {}
+    if args.pinentry:
+        config['pinentry-program'] = args.pinentry
+    if args.passentry:
+        config['passentry-program'] = args.passentry
     conn = JustInTimeConnection(
         conn_factory=lambda: client.Client(device_type(config=config)),
         identities=identities, public_keys=public_keys)
