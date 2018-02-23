@@ -218,7 +218,7 @@ def _dummy_context():
 @handle_connection_error
 def main(device_type):
     """Run ssh-agent using given hardware client factory."""
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals, too-many-branches
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
