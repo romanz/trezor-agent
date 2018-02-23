@@ -216,9 +216,7 @@ def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     # pylint: disable=too-many-locals
     args = create_agent_parser(device_type=device_type).parse_args()
-    config = util.parse_config()
-    verbosity = args.verbose or int(config.get('verbosity', 0))
-    util.setup_logging(verbosity=verbosity, filename=args.log_file)
+    util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
     public_keys = None
     if args.identity.startswith('/'):
@@ -257,6 +255,10 @@ def main(device_type):
         command = os.environ['SHELL']
         sys.stdin.close()
 
+    config = {
+        'pinentry-program': args.pinentry,
+        'passentry-program': args.passentry,
+    }
     conn = JustInTimeConnection(
         conn_factory=lambda: client.Client(device_type(config=config)),
         identities=identities, public_keys=public_keys)

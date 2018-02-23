@@ -214,7 +214,11 @@ def run_agent(device_type):
     args, _ = parser.parse_known_args()
 
     assert args.homedir
-    config = util.parse_config(args.homedir)
+    config_file = os.path.join(args.homedir, 'gpg-agent.conf')
+
+    lines = (line.strip() for line in open(config_file))
+    lines = (line for line in lines if line and not line.startswith('#'))
+    config = dict(line.split(' ', 1) for line in lines)
 
     util.setup_logging(verbosity=int(config['verbosity']),
                        filename=config['log-file'])
