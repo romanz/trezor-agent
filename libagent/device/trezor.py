@@ -44,6 +44,7 @@ def _pin_communicate(program, message, error=None, options=None):
         )
     except OSError as e:
         if e.errno == os.errno.ENOENT:
+            log.debug('Couldn\'t find pin/pass entry program {}'.format(program))
             return None
         else:
             raise
