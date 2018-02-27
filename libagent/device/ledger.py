@@ -49,7 +49,7 @@ class LedgerNanoS(interface.Device):
             raise interface.NotFoundError(
                 '{} not connected: "{}"'.format(self, e))
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Get PublicKey object for specified BIP32 address and elliptic curve."""
         curve_name = identity.get_curve_name(ecdh)
         path = _expand_path(identity.get_bip32_address(ecdh))
@@ -66,7 +66,7 @@ class LedgerNanoS(interface.Device):
         log.debug('result: %r', result)
         return _convert_public_key(curve_name, result[1:])
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, options=None):
         """Sign given blob and return the signature (as bytes)."""
         path = _expand_path(identity.get_bip32_address(ecdh=False))
         if identity.identity_dict['proto'] == 'ssh':
@@ -103,7 +103,7 @@ class LedgerNanoS(interface.Device):
         else:
             return bytes(result[:64])
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         path = _expand_path(identity.get_bip32_address(ecdh=True))
         if identity.curve_name == 'nist256p1':

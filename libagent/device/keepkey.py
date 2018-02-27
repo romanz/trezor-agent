@@ -32,11 +32,12 @@ class KeepKey(trezor.Trezor):
 
     required_version = '>=1.0.4'
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Return public key."""
         _verify_support(identity, ecdh)
-        return trezor.Trezor.pubkey(self, identity=identity, ecdh=ecdh)
+        return trezor.Trezor.pubkey(self, identity=identity, ecdh=ecdh,
+                                    options=options)
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """No support for ECDH in KeepKey firmware."""
         _verify_support(identity, ecdh=True)

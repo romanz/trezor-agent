@@ -22,14 +22,16 @@ class Client(object):
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Return public key as VerifyingKey object."""
         with self.device:
-            pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)
+            pubkey = self.device.pubkey(ecdh=ecdh,
+                                        identity=identity,
+                                        options=options)
         return formats.decompress_pubkey(
             pubkey=pubkey, curve_name=identity.curve_name)
 
-    def sign(self, identity, digest):
+    def sign(self, identity, digest, options=None):
         """Sign the digest and return a serialized signature."""
         log.info('please confirm GPG signature on %s for "%s"...',
                  self.device, identity.to_string())
@@ -37,12 +39,16 @@ class Client(object):
             digest = digest[:32]  # sign the first 256 bits
         log.debug('signing digest: %s', util.hexlify(digest))
         with self.device:
-            sig = self.device.sign(blob=digest, identity=identity)
+            sig = self.device.sign(blob=digest,
+                                   identity=identity,
+                                   options=options)
         return (util.bytes2num(sig[:32]), util.bytes2num(sig[32:]))
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """Derive shared secret using ECDH from remote public key."""
         log.info('please confirm GPG decryption on %s for "%s"...',
                  self.device, identity.to_string())
         with self.device:
-            return self.device.ecdh(pubkey=pubkey, identity=identity)
+            return self.device.ecdh(pubkey=pubkey,
+                                    identity=identity,
+                                    options=options)

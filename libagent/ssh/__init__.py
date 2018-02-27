@@ -102,6 +102,10 @@ def create_agent_parser(device_type):
                    help='proto://[user@]host[:port][/path]')
     p.add_argument('command', type=str, nargs='*', metavar='ARGUMENT',
                    help='command to run under the SSH agent')
+    p.add_argument('--pinentry', help='Configure a GPG PINENTRY program')
+    p.add_argument('--passentry',
+                   help=('Configure a GPG PINENTRY program for passphrase '
+                         'entry'))
     return p
 
 
@@ -227,6 +231,7 @@ def _get_sock_path(args):
 @handle_connection_error
 def main(device_type):
     """Run ssh-agent using given hardware client factory."""
+    # pylint: disable=too-many-locals, too-many-branches
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
@@ -267,8 +272,13 @@ def main(device_type):
         command = os.environ['SHELL']
         sys.stdin.close()
 
+    config = {}
+    if args.pinentry:
+        config['pinentry-program'] = args.pinentry
+    if args.passentry:
+        config['passentry-program'] = args.passentry
     conn = JustInTimeConnection(
-        conn_factory=lambda: client.Client(device_type()),
+        conn_factory=lambda: client.Client(device_type(config=config)),
         identities=identities, public_keys=public_keys)
 
     if command or args.daemonize or args.foreground:

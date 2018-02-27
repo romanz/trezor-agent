@@ -105,7 +105,7 @@ class Identity(object):
 class Device(object):
     """Abstract cryptographic hardware device interface."""
 
-    def __init__(self):
+    def __init__(self, config=None):  # pylint: disable=unused-argument
         """C-tor."""
         self.conn = None
 
@@ -126,15 +126,15 @@ class Device(object):
             log.exception('close failed: %s', e)
         self.conn = None
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Get public key (as bytes)."""
         raise NotImplementedError()
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, options=None):
         """Sign given blob and return the signature (as bytes)."""
         raise NotImplementedError()
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         raise NotImplementedError()
 

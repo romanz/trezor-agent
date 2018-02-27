@@ -20,11 +20,14 @@ class MockDevice(device.interface.Device):  # pylint: disable=abstract-method
     def connect(self):  # pylint: disable=no-self-use
         return mock.Mock()
 
-    def pubkey(self, identity, ecdh=False):  # pylint: disable=unused-argument
+    def pubkey(self,
+               identity,
+               ecdh=False,
+               options=None):  # pylint: disable=unused-argument
         assert self.conn
         return PUBKEY
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, options=None):
         """Sign given blob and return the signature (as bytes)."""
         assert self.conn
         assert blob == BLOB

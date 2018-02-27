@@ -43,7 +43,7 @@ class FakeDevice(interface.Device):
         """Close connection."""
         self.conn = None
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, options=None):
         """Return public key."""
         _verify_support(identity)
         data = self.vk.to_string()
@@ -51,7 +51,7 @@ class FakeDevice(interface.Device):
         prefix = bytearray([2 + (bytearray(y)[0] & 1)])
         return bytes(prefix) + x
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, options=None):
         """Sign given blob and return the signature (as bytes)."""
         if identity.identity_dict['proto'] in {'ssh'}:
             digest = hashlib.sha256(blob).digest()
@@ -60,7 +60,7 @@ class FakeDevice(interface.Device):
         return self.sk.sign_digest_deterministic(digest=digest,
                                                  hashfunc=hashlib.sha256)
 
-    def ecdh(self, identity, pubkey):
+    def ecdh(self, identity, pubkey, options=None):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         assert pubkey[:1] == b'\x04'
         peer = ecdsa.VerifyingKey.from_string(
