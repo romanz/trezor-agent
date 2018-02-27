@@ -70,7 +70,7 @@ def _pin_communicate(program, message, error=None, options=None):
         else:
             send('OPTION {}'.format(k))
         expect('OK')
-    send('SETDESC {}'.format(message))
+    send('SETDESC {}'.format(' '.join(message.splitlines())))
     expect('OK')
     if error:
         send('SETERROR {}'.format(error))
