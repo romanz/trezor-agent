@@ -16,9 +16,7 @@ log = logging.getLogger(__name__)
 
 def _message_box(label, sp=subprocess):
     """Launch an external process for PIN/passphrase entry GUI."""
-    cmd = ('import sys, pymsgbox; '
-           'sys.stdout.write(pymsgbox.password(sys.stdin.read()))')
-    args = [sys.executable, '-c', cmd]
+    args = [sys.executable, '-m', 'libagent.device.ui.simple']
     p = sp.Popen(args=args, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
     out, err = p.communicate(label.encode('ascii'))
     exitcode = p.wait()
@@ -153,7 +151,7 @@ class Trezor(interface.Device):
 
         conn.callback_PinMatrixRequest = new_handler
 
-    cached_passphrase_ack = 0
+    cached_passphrase_ack = None
 
     def _override_passphrase_handler(self, conn):
         cli_handler = conn.callback_PassphraseRequest
