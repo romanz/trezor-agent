@@ -97,4 +97,4 @@ $ onlykey-agent -c user@example.com -e ed25519
 
 You can also just type `-e e` instead of typing out the full `-e ed25519`
 
-The project started from a fork [trezor-agent](https://github.com/romanz/trezor-agent) (thanks!).
+The project started from a fork [trezor-agent](https://github.com/romanz/trezor-agent) (thanks!). 

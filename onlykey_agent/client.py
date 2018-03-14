@@ -133,6 +133,8 @@ class Client(object):
                 log.info('received= %s', repr(result))
                 while len(result) < 64:
                     result.append(0)
+                log.info('disconnected from %s', self.device_name)
+                self.ok.close()
                 return result
 
         raise Exception('failed to sign challenge')
