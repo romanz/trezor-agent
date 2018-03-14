@@ -82,7 +82,7 @@ class UnexpectedError(Exception):
 def expect(p, prefixes):
     """Read a line and return it without required prefix."""
     resp = p.stdout.readline()
-    log.debug('%s -> %r', p.args, resp)
+    log.debug('%s -> %r', getattr(p, 'args', '?'), resp)
     for prefix in prefixes:
         if resp.startswith(prefix):
             return resp[len(prefix):]
