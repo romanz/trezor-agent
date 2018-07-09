@@ -8,8 +8,8 @@ SSH is a popular remote access tool that is often used by administrators. Thanks
 
 1) Install OnlyKey agent on your client machine:
 ```
-$ sudo pip2 install onlykey
-$ sudo pip2 install onlykey-agent
+$ sudo pip install onlykey
+$ sudo pip install onlykey-agent
 ```
 
 2) Generate public key using onlykey-agent
