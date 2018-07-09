@@ -35,29 +35,33 @@ $ onlykey-agent user@example.com git push
 
 ## Installation
 
+### Linux UDEV Rule
+
+In order for non-root users in Linux to be able to communicate with OnlyKey a udev rule must be created as described [here](https://docs.crp.to/linux.html).
+
 ### MacOS Install with dependencies
 Brew is required. To install visit https://brew.sh/
 ```
 $ brew update && brew upgrade
 $ brew install python
-$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip install onlykey
+$ pip install onlykey-agent
 ```
 
 ### Ubuntu Install with dependencies
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
-$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip install onlykey
+$ pip install onlykey-agent
 ```
 
 ### Debian Install with dependencies
 ```
 $ apt update && apt upgrade
 $ apt install python-pip python-dev libusb-1.0-0-dev libudev-dev
-$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip install onlykey
+$ pip install onlykey-agent
 ```
 
 ### Fedora/RedHat/CentOS Install with dependencies
@@ -65,19 +69,15 @@ $ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
 $ yum update
 $ yum install python-pip python-devel libusb-devel libudev-devel \
               gcc redhat-rpm-config
-$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip install onlykey
+$ pip install onlykey-agent
 ```
 ### OpenSUSE Install with dependencies
 ```
 $ zypper install python-pip python-devel libusb-1_0-devel libudev-devel
-$ pip2 install git+git://github.com/trustcrypto/python-onlykey.git
-$ pip2 install git+git://github.com/trustcrypto/onlykey-agent.git
+$ pip install onlykey
+$ pip install onlykey-agent
 ```
-
-### Linux UDEV Rule
-
-In order for non-root users in Linux to be able to communicate with OnlyKey a udev rule must be created as described [here](https://www.pjrc.com/teensy/td_download.html).
 
 ## Advanced Options
 
