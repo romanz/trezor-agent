@@ -87,6 +87,8 @@ class Handler:
         # "Clone" existing GPG version
         self.version = keyring.gpg_version()
 
+        self.get_identity_cache = {}
+
         self.handlers = {
             b'RESET': lambda *_: self.reset(),
             b'OPTION': lambda _, args: self.handle_option(*args),
@@ -151,29 +153,38 @@ class Handler:
             raise AgentError(b'ERR 100696144 No such device <SCD>')
         keyring.sendline(conn, b'D ' + reply)
 
-    @util.memoize_method  # global cache for key grips
     def get_identity(self, keygrip):
         """
         Returns device.interface.Identity that matches specified keygrip.
 
         In case of missing keygrip, KeyError will be raised.
         """
-        keygrip_bytes = binascii.unhexlify(keygrip)
-        pubkey_dict, user_ids = decode.load_by_keygrip(
-            pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
-        # We assume the first user ID is used to generate TREZOR-based GPG keys.
-        user_id = user_ids[0]['value'].decode('utf-8')
-        curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
-        ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
+        identity = self.get_identity_cache.get(keygrip, None)
+        if identity is not None:
+            if identity == False:
+                raise KeyError('{} keygrip cached as not found'.format(keygrip))
+            return identity
 
-        identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-        verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
-        pubkey = protocol.PublicKey(
-            curve_name=curve_name, created=pubkey_dict['created'],
-            verifying_key=verifying_key, ecdh=ecdh)
-        assert pubkey.key_id() == pubkey_dict['key_id']
-        assert pubkey.keygrip() == keygrip_bytes
-        return identity
+        try:
+            keygrip_bytes = binascii.unhexlify(keygrip)
+            pubkey_dict, user_ids = decode.load_by_keygrip(
+                pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
+            # We assume the first user ID is used to generate TREZOR-based GPG keys.
+            user_id = user_ids[0]['value'].decode('utf-8')
+            curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
+            ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
+
+            identity = client.create_identity(user_id=user_id, curve_name=curve_name)
+            verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
+            pubkey = protocol.PublicKey(
+                curve_name=curve_name, created=pubkey_dict['created'],
+                verifying_key=verifying_key, ecdh=ecdh)
+            assert pubkey.key_id() == pubkey_dict['key_id']
+            assert pubkey.keygrip() == keygrip_bytes
+            return identity
+        except KeyError:
+            self.get_identity_cache[keygrip] = False
+            raise
 
     def pksign(self, conn):
         """Sign a message digest using a private EC key."""
