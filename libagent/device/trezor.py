@@ -34,16 +34,19 @@ class Trezor(interface.Device):
             return
 
         def new_handler(_):
-            try:
-                scrambled_pin = self.ui.get_pin()
-                result = self._defs.PinMatrixAck(pin=scrambled_pin)
-                if not set(scrambled_pin).issubset('123456789'):
-                    raise self._defs.PinException(
-                        None, 'Invalid scrambled PIN: {!r}'.format(result.pin))
-                return result
-            except:  # noqa
-                conn.init_device()
-                raise
+            pin = self.ui.get_pin()
+            if not pin.isdigit():
+                raise ValueError("Non-numeric PIN provided")
+
+            resp = self.call_raw(proto.PinMatrixAck(pin=pin))
+            if isinstance(resp, proto.Failure) and resp.code in (
+                proto.FailureType.PinInvalid,
+                proto.FailureType.PinCancelled,
+                proto.FailureType.PinExpected,
+            ):
+                raise exceptions.PinException(resp.code, resp.message)
+            else:
+                return resp
 
         conn.callback_PinMatrixRequest = new_handler
 
