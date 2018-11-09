@@ -6,9 +6,14 @@ import logging
 import functools
 
 from trezorlib.client import PinException
-from trezorlib.tools import CallException
 from trezorlib.client import TrezorClient
-from trezorlib.messages import IdentityType, PassphraseAck, PinMatrixAck, PassphraseStateAck
+from trezorlib.messages import Failure
+from trezorlib.messages import FailureType
+from trezorlib.messages import IdentityType
+from trezorlib.messages import PassphraseAck
+from trezorlib.messages import PassphraseStateAck
+from trezorlib.messages import PinMatrixAck
+from trezorlib.tools import CallException
 from trezorlib.ui import ClickUI
 
 Client = functools.partial(TrezorClient, ui=ClickUI)
