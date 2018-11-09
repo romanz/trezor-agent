@@ -3,11 +3,15 @@
 # pylint: disable=unused-import,import-error
 import os
 import logging
+import functools
 
 from trezorlib.client import PinException
 from trezorlib.tools import CallException
-from trezorlib.client import TrezorClient as Client
+from trezorlib.client import TrezorClient
 from trezorlib.messages import IdentityType, PassphraseAck, PinMatrixAck, PassphraseStateAck
+from trezorlib.ui import ClickUI
+
+Client = functools.partial(TrezorClient, ui=ClickUI)
 
 try:
     from trezorlib.transport import get_transport
