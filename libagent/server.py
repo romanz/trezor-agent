@@ -5,6 +5,8 @@ import os
 import socket
 import subprocess
 import threading
+from libagent.device.interface import NotFoundError
+from ledgerblue.commException import CommException
 
 from . import util
 
@@ -92,7 +94,14 @@ def handle_connection(conn, handler, mutex):
             while True:
                 msg = util.read_frame(conn)
                 with mutex:
-                    reply = handler.handle(msg=msg)
+                    try:
+                        reply = handler.handle(msg=msg)
+                    except NotFoundError:
+                        print("ERROR: Device not found!")
+                        return
+                    except CommException:
+                        print("ERROR: SSH/PGP Agent not opened!")
+                        return
                 util.send(conn, reply)
     except EOFError:
         log.debug('goodbye agent')
