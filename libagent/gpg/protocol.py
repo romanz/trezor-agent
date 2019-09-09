@@ -172,10 +172,6 @@ SUPPORTED_CURVES = {
 
 ECDH_ALGO_ID = 18
 
-CUSTOM_KEY_LABEL = b'TREZOR-GPG'  # marks "our" pubkey
-CUSTOM_SUBPACKET_ID = 26  # use "policy URL" subpacket
-CUSTOM_SUBPACKET = subpacket(CUSTOM_SUBPACKET_ID, CUSTOM_KEY_LABEL)
-
 
 def get_curve_name_by_oid(oid):
     """Return curve name matching specified OID, or raise KeyError."""
