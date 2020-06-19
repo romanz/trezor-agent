@@ -24,8 +24,12 @@ class Client:
         with self.device:
             for i in identities:
                 pubkey = self.device.pubkey(identity=i)
-                vk = formats.decompress_pubkey(pubkey=pubkey,
-                                               curve_name=i.curve_name)
+                if hasattr(self.device, 'device_name'): 
+                    vk = pubkey
+                else:
+                    vk = formats.decompress_pubkey(pubkey=pubkey,
+                                                   curve_name=i.curve_name)
+
                 public_key = formats.export_public_key(vk=vk,
                                                        label=i.to_string())
                 public_keys.append(public_key)

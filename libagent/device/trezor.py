@@ -87,6 +87,7 @@ class Trezor(interface.Device):
             n=addr,
             ecdsa_curve_name=curve_name)
         log.debug('result: %s', result)
+        log.debug('result: %s', result.node.public_key)
         return bytes(result.node.public_key)
 
     def _identity_proto(self, identity):

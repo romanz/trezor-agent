@@ -110,6 +110,27 @@ Then, install the latest [keepkey_agent](https://pypi.python.org/pypi/keepkey_ag
     $ pip3 install --user -e trezor-agent/agents/keepkey
     ```
 
+# 4. Install the OnlyKey agent
+
+1. Make sure you are running the latest firmware version on your OnlyKey:
+
+ * [OnlyKey Firmware Upgrade Guide](https://docs.crp.to/upgradeguide.html)
+
+2. Make sure that your `udev` rules are configured [correctly](https://docs.crp.to/linux.html#udev-rule).
+3. Then, install the latest [onlykey_agent](https://pypi.python.org/pypi/onlykey_agent) package:
+
+    ```
+    $ pip3 install onlykey_agent
+    ```
+
+    Or, directly from the latest source code:
+
+    ```
+    $ git clone https://github.com/romanz/trezor-agent
+    $ pip3 install --user -e trezor-agent
+    $ pip3 install --user -e trezor-agent/agents/onlykey
+    ```
+
 # 4. Install the Ledger Nano S agent
 
 1. Make sure you are running the latest firmware version on your Ledger Nano S:
