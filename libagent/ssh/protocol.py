@@ -102,7 +102,6 @@ class Handler:
         log.debug('calling %s()', method.__name__)
         reply = method(buf=buf)
         debug_reply = ': {!r}'.format(reply) if self.debug else ''
-        log.debug('reply: %d bytes%s', len(reply), debug_reply)
         return reply
 
     def list_pubs(self, buf):
@@ -127,8 +126,10 @@ class Handler:
         key = formats.parse_pubkey(util.read_frame(buf))
         log.debug('looking for %s', key['fingerprint'])
         blob = util.read_frame(buf)
-        assert util.read_frame(buf) == b''
-        assert not buf.read()
+
+        if (key['type'] != b'ssh-rsa'):
+            assert util.read_frame(buf) == b''
+            assert not buf.read()
 
         for k in self.conn.parse_public_keys():
             if (k['fingerprint']) == (key['fingerprint']):
@@ -151,10 +152,16 @@ class Handler:
             log.info('signature status: OK')
         except formats.ecdsa.BadSignatureError:
             log.exception('signature status: ERROR')
-            raise ValueError('invalid ECDSA signature')
+            raise ValueError('invalid signature')
 
         log.debug('signature size: %d bytes', len(sig_bytes))
 
-        data = util.frame(util.frame(key['type']), util.frame(sig_bytes))
+        if (key['type'] == b'ssh-rsa'):
+            if b'rsa-sha2-512' in blob:
+                data = util.frame(util.frame(b'rsa-sha2-512'), util.frame(sig_bytes))
+            else:
+                data = util.frame(util.frame(b'rsa-sha2-256'), util.frame(sig_bytes))
+        else:
+            data = util.frame(util.frame(key['type']), util.frame(sig_bytes))
         code = util.pack('B', msg_code('SSH2_AGENT_SIGN_RESPONSE'))
         return util.frame(code, data)
