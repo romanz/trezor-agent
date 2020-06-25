@@ -64,17 +64,16 @@ class OnlyKey(interface.Device):
         else:
             data = '01'+ data
 
-        log.info('Identity hash =%s', data)
         self.ok.send_message(msg=self._defs.Message.OKGETPUBKEY, slot_id=132, payload=data)
-        time.sleep(.5)
-        for _ in range(3):
+        t_end = time.time() + 2
+        while time.time() < t_end:
             try:
-                ok_pubkey = self.ok.read_bytes()
-            except:
-                raise interface.DeviceError("OnlyKey is locked, enter PIN to unlock")
+                ok_pubkey = self.ok.read_bytes(timeout_ms=100)
+                if len(ok_pubkey) == 64 and len(set(ok_pubkey[0:63])) != 1:
+                    break
+            except Exception as e:
+                raise interface.DeviceError(e)
                 return
-            if len(ok_pubkey) == 64:
-                break
 
         log.info('received= %s', repr(ok_pubkey))
 
@@ -110,10 +109,10 @@ class OnlyKey(interface.Device):
 
         log.info('Identity hash =%s', data)
 
-        test_payload = blob + data
+        raw_message = blob + data
         # Compute the challenge pin
         h2 = hashlib.sha256()
-        h2.update(test_payload)
+        h2.update(raw_message)
         d = h2.digest()
         assert len(d) == 32
 
@@ -121,8 +120,6 @@ class OnlyKey(interface.Device):
             return byte % 6 + 1
 
         b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
-
-        log.info('blob to send', repr(test_payload))
 
         # Determine type of key to derive on OnlyKey for signature
         # 201 = ed25519
@@ -138,28 +135,31 @@ class OnlyKey(interface.Device):
             this_slot_id = 203
             log.info('Key type secp256k1')
 
-        self.ok.send_large_message2(msg=self._defs.Message.OKSIGN, payload=test_payload, slot_id=this_slot_id)
+        self.ok.send_large_message2(msg=self._defs.Message.OKSIGN, payload=raw_message, slot_id=this_slot_id)
 
 
         print ('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
         print ('Enter the 3 digit challenge code on OnlyKey to authorize')
         print ('{} {} {}'.format(b1, b2, b3))
-        #TODO ping messages so that we don't need enter key to tell when done.
-        time.sleep(10)
-        for _ in range(10):
+
+        t_end = time.time() + 22
+        while time.time() < t_end:
             try:
-                result = self.ok.read_bytes(64, to_str=True, timeout_ms=200)
-            except:
-                raise interface.DeviceError("Error incorrect challenge was entered")
+                result = self.ok.read_bytes(timeout_ms=100)
+                if len(result) == 64 and len(set(result[0:63])) != 1:
+                    break
+            except Exception as e:
+                raise interface.DeviceError(e)
                 return
-            if len(result) >= 60:
-                log.info('received= %s', repr(result))
-                while len(result) < 64:
-                    result.append(0)
-                log.info('disconnected from %s', self.device_name)
-                self.ok.close()
-                return result
+
+        if len(result) >= 60:
+            log.info('received= %s', repr(result))
+            while len(result) < 64:
+                result.append(0)
+            log.info('disconnected from %s', self.device_name)
+            self.ok.close()
+            return bytes(result)
 
         raise Exception('failed to sign challenge')
 
@@ -172,13 +172,14 @@ class OnlyKey(interface.Device):
         h1 = hashlib.sha256()
         h.update(identity.to_bytes())
         data = h.hexdigest()
+        data = codecs.decode(data, 'hex_codec')
 
         log.info('Identity hash =%s', data)
 
-        test_payload = blob + data
+        raw_message = blob + data
         # Compute the challenge pin
         h2 = hashlib.sha256()
-        h2.update(test_payload)
+        h2.update(raw_message)
         d = h2.digest()
         assert len(d) == 32
 
@@ -188,7 +189,7 @@ class OnlyKey(interface.Device):
 
         b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
 
-        log.info('blob to send', repr(test_payload))
+        log.info('blob to send', repr(raw_message))
 
         # Determine type of key to derive on OnlyKey for signature
         # 201 = ed25519
@@ -204,26 +205,30 @@ class OnlyKey(interface.Device):
             this_slot_id = 203
             log.info('Key type secp256k1')
 
-        self.ok.send_large_message2(msg=self._defs.Message.OKDECRYPT, payload=test_payload, slot_id=this_slot_id)
+        self.ok.send_large_message2(msg=self._defs.Message.OKDECRYPT, payload=raw_message, slot_id=this_slot_id)
 
-
-        print ('Please confirm user', msg['user'], 'login to', identity, 'using', self.device_name)
+        print ('"%s" signing %r (%s) on %s',
+                  identity.to_string(), blob, curve_name, self)
         print ('Enter the 3 digit challenge code on OnlyKey to authorize')
         print ('{} {} {}'.format(b1, b2, b3))
-        #TODO ping messages so that we don't need enter key to tell when done.
-        time.sleep(10)
-        for _ in range(10):
+
+        t_end = time.time() + 22
+        while time.time() < t_end:
             try:
-                result = self.ok.read_bytes(64, to_str=True, timeout_ms=200)
-            except:
-                raise interface.DeviceError("Error incorrect challenge was entered")
+                result = self.ok.read_bytes(timeout_ms=100)
+                if len(result) == 64 and len(set(result[0:63])) != 1:
+                    break
+            except Exception as e:
+                raise interface.DeviceError(e)
                 return
 
-            if len(result) >= 32:
-                log.info('received= %s', repr(result))
-                log.info('disconnected from %s', self.device_name)
-                self.ok.close()
-                return result
+        if len(result) >= 60:
+            log.info('received= %s', repr(result))
+            while len(result) < 64:
+                result.append(0)
+            log.info('disconnected from %s', self.device_name)
+            self.ok.close()
+            return bytes(result)
 
         raise Exception('failed to generate shared session key')
 
