@@ -9,15 +9,16 @@ import hashlib
 import codecs
 import struct
 import sys
+import unidecode
 
 from . import interface
+from .. import formats, util
 
 import ecdsa
 import ed25519
 import time
 
 log = logging.getLogger(__name__)
-
 
 class OnlyKey(interface.Device):
     """Connection to OnlyKey device."""
@@ -46,20 +47,28 @@ class OnlyKey(interface.Device):
         log.info('disconnected from %s', self.device_name)
         self.ok.close()
 
+    def oclose(self):
+        """Close connection."""
+        log.info('disconnected from %s', self)
+
     def pubkey(self, identity, ecdh=False):
-        log.info('getting public key from %s...', self.device_name)
-        log.info('Trying to read the public key...')
-        # Compute the challenge pin
-        h = hashlib.sha256()
-        h.update(identity.to_bytes())
-        data = h.hexdigest()
+        curve_name = identity.get_curve_name(ecdh=ecdh)
+        log.debug('"%s" getting public key (%s) from %s',
+                  identity.to_string(), curve_name, self)
+
+        # Compute the challenge pin from identity
+        h1 = hashlib.sha256()
+        h1.update(identity.to_bytes())
+        data = h1.hexdigest()
 
         log.info('Identity hash =%s', data)
 
-        if identity.curve_name == 'secp256k1':
+        if curve_name == 'curve25519':
+            data = '04' + data
+        elif curve_name == 'secp256k1':
             # Not currently supported by agent, for future use
             data = '03' + data
-        elif identity.curve_name == 'nist256p1':
+        elif curve_name == 'nist256p1':
             data = '02' + data
         else:
             data = '01'+ data
@@ -95,22 +104,20 @@ class OnlyKey(interface.Device):
         else:
             raise interface.DeviceError("Error response length is not a valid public key")
 
-
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
         curve_name = identity.get_curve_name(ecdh=False)
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
 
+        # Compute the challenge pin from identity
         h1 = hashlib.sha256()
         h1.update(identity.to_bytes())
         data = h1.hexdigest()
         data = codecs.decode(data, 'hex_codec')
 
-        log.info('Identity hash =%s', data)
-
+        log.info('data hash =%s', data)
         raw_message = blob + data
-        # Compute the challenge pin
         h2 = hashlib.sha256()
         h2.update(raw_message)
         d = h2.digest()
@@ -153,6 +160,7 @@ class OnlyKey(interface.Device):
                 raise interface.DeviceError(e)
                 return
 
+
         if len(result) >= 60:
             log.info('received= %s', repr(result))
             while len(result) < 64:
@@ -163,54 +171,51 @@ class OnlyKey(interface.Device):
 
         raise Exception('failed to sign challenge')
 
+
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         curve_name = identity.get_curve_name(ecdh=True)
         log.debug('"%s" shared session key (%s) for %r from %s',
                   identity.to_string(), curve_name, pubkey, self)
 
+        # Compute the challenge pin from identity
         h1 = hashlib.sha256()
-        h.update(identity.to_bytes())
-        data = h.hexdigest()
+        h1.update(identity.to_bytes())
+        data = h1.hexdigest()
         data = codecs.decode(data, 'hex_codec')
 
-        log.info('Identity hash =%s', data)
-
-        raw_message = blob + data
-        # Compute the challenge pin
+        log.info('data hash =%s', data)
+        raw_message = pubkey + data
         h2 = hashlib.sha256()
         h2.update(raw_message)
         d = h2.digest()
         assert len(d) == 32
 
         def get_button(byte):
-            ibyte = ord(byte)
-            return ibyte % 6 + 1
+            return byte % 6 + 1
 
         b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
 
         log.info('blob to send', repr(raw_message))
 
         # Determine type of key to derive on OnlyKey for signature
-        # 201 = ed25519
+        # 204 = curve25519
         # 202 = P256
         # 203 = secp256k1
-        if identity.curve_name == 'ed25519':
-            this_slot_id = 201
-            log.info('Key type ed25519')
+        if identity.curve_name == 'curve25519':
+            this_slot_id = 204
         elif identity.curve_name == 'nist256p1':
             this_slot_id = 202
-            log.info('Key type nist256p1')
         else:
             this_slot_id = 203
-            log.info('Key type secp256k1')
 
         self.ok.send_large_message2(msg=self._defs.Message.OKDECRYPT, payload=raw_message, slot_id=this_slot_id)
 
-        print ('"%s" signing %r (%s) on %s',
-                  identity.to_string(), blob, curve_name, self)
+        print ('"%s" shared session key (%s) for %r from %s',
+                  identity.to_string(), curve_name, pubkey, self)
         print ('Enter the 3 digit challenge code on OnlyKey to authorize')
         print ('{} {} {}'.format(b1, b2, b3))
+
 
         t_end = time.time() + 22
         while time.time() < t_end:
@@ -222,13 +227,15 @@ class OnlyKey(interface.Device):
                 raise interface.DeviceError(e)
                 return
 
-        if len(result) >= 60:
-            log.info('received= %s', repr(result))
-            while len(result) < 64:
-                result.append(0)
-            log.info('disconnected from %s', self.device_name)
-            self.ok.close()
-            return bytes(result)
+
+        log.info('received= %s', repr(result))
+        log.info('disconnected from %s', self.device_name)
+        self.ok.close()
+
+        if  len(set(result[34:63])) == 1:
+            result = b'\x04' + bytes(result[0:32])
+
+        return bytes(result)
 
         raise Exception('failed to generate shared session key')
 
@@ -264,4 +271,11 @@ def _parse_ssh_blob(data):
     public_key = util.read_frame(i)
     res['public_key'] = formats.parse_pubkey(public_key)
     assert not i.read()
+    return res
+
+def bytes2num(s):
+    """Convert MSB-first bytes to an unsigned integer."""
+    res = 0
+    for i, c in enumerate(reversed(bytearray(s))):
+        res += c << (i * 8)
     return res
