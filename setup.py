@@ -22,6 +22,7 @@ setup(
         'python-daemon>=2.1.2',
         'ecdsa>=0.13',
         'pynacl>=1.4.0',
+        'pycryptodome>=3.9.8',
         'mnemonic>=0.18',
         'pymsgbox>=1.0.6',
         'semver>=2.2',

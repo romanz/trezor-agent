@@ -165,10 +165,11 @@ class Handler:
         user_id = user_ids[0]['value'].decode('utf-8')
         curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
         ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
-
         identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-
-        verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
+        if self.client.device.package_name() == 'onlykey-agent':
+            verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh, keygrip=self.pubkey_bytes)
+        else:
+            verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
             verifying_key=verifying_key, ecdh=ecdh)
