@@ -20,13 +20,6 @@ import time
 
 import pkg_resources
 import semver
-import Crypto.Hash
-import Crypto.PublicKey
-import Crypto.Signature
-from Crypto.Signature import pkcs1_15
-from Crypto.Hash import SHA256, SHA512
-from Crypto.PublicKey import RSA
-import base64
 
 
 from . import agent, client, encode, keyring, protocol
@@ -41,13 +34,11 @@ def export_public_key(device_type, args):
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
     c = client.Client(device=device_type())
+    if device_type.package_name() == 'onlykey-agent':
+        device_type.skey(device_type, args.skey)
+        device_type.dkey(device_type, args.dkey)
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
-
-    if device_type.package_name() == 'onlykey-agent':
-        protocol.CUSTOM_KEY_LABEL = b'ONLYKEY-GPG-' + '{:x}'.format(device_type.skeyslot).encode() + '{:x}'.format(device_type.dkeyslot).encode() 
-        protocol.CUSTOM_SUBPACKET = protocol.subpacket(protocol.CUSTOM_SUBPACKET_ID, protocol.CUSTOM_KEY_LABEL)
-
     verifying_key = c.pubkey(identity=identity, ecdh=False)
     decryption_key = c.pubkey(identity=identity, ecdh=True)
     signer_func = functools.partial(c.sign, identity=identity)
@@ -83,11 +74,11 @@ def export_public_key(device_type, args):
             created=args.time, verifying_key=decryption_key, ecdh=True)
 
         result = encode.create_primary(user_id=args.user_id,
-                                        pubkey=primary,
-                                        signer_func=signer_func)
+                                       pubkey=primary,
+                                       signer_func=signer_func)
         result = encode.create_subkey(primary_bytes=result,
-                                        subkey=subkey,
-                                        signer_func=signer_func)
+                                      subkey=subkey,
+                                      signer_func=signer_func)
 
     return protocol.armor(result, 'PUBLIC KEY BLOCK')
 
@@ -131,7 +122,7 @@ def run_init(device_type, args):
                 'so please note that the API and features may '
                 'change without backwards compatibility!')
 
-    verify_gpg_version()    
+    verify_gpg_version()
 
     # Prepare new GPG home directory for hardware-based identity
     device_name = os.path.basename(sys.argv[0]).rsplit('-', 1)[0]
@@ -218,10 +209,10 @@ fi
     f = write_file(os.path.join(homedir, 'ownertrust.txt'), fpr + ':6\n')
     check_call(keyring.gpg_command(['--homedir', homedir,
                                     '--import-ownertrust', f.name]))
-    
-    # Load agent and make sure it responds with the new identity
-    check_call(keyring.gpg_command(['--homedir', homedir, '--list-secret-keys', args.user_id]))
 
+    # Load agent and make sure it responds with the new identity
+    check_call(keyring.gpg_command(['--homedir', homedir,
+                                    '--list-secret-keys', args.user_id]))
 
 
 def run_unlock(device_type, args):
@@ -255,7 +246,7 @@ def run_agent(device_type):
         p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
                        default=132,
                        help='specify key to use for signing, 1-4 for RSA, 101-116 for ECC')
-        p.add_argument('-dk', '--dkey', type=int, metavar='DECRYPT_KEY',
+        p.add_argument('-dk', '--s', type=int, metavar='DECRYPT_KEY',
                        default=132,
                        help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
     else:
@@ -366,12 +357,6 @@ def main(device_type):
         p.set_defaults(func=run_unlock)
 
     args = parser.parse_args()
-
-    if agent_package == 'onlykey-agent':
-        device_type.set_skey(device_type, args.skey)
-        device_type.set_dkey(device_type, args.dkey)
-
     device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     return args.func(device_type=device_type, args=args)
-

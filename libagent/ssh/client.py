@@ -24,7 +24,7 @@ class Client:
         with self.device:
             for i in identities:
                 pubkey = self.device.pubkey(identity=i)
-                if self.device.package_name() == 'onlykey-agent':
+                if self.device.package_name() == 'onlykey-agent': 
                     vk = pubkey
                 else:
                     vk = formats.decompress_pubkey(pubkey=pubkey,
@@ -48,8 +48,6 @@ class Client:
         log.info('please confirm user "%s" login to "%s" using %s...',
                  msg['user'].decode('ascii'), identity.to_string(),
                  self.device)
-        if self.device.package_name() == 'onlykey-agent':
-            self.device.sighash(msg['key_type'])
 
         with self.device:
             return self.device.sign(blob=blob, identity=identity)
