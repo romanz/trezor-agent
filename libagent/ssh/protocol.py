@@ -142,12 +142,12 @@ class Handler:
 
         label = key['name'].decode('utf-8')
         log.debug('signing %d-byte blob with "%s" key', len(blob), label)
-        time.sleep(5)
         try:
             signature = self.conn.sign(blob=blob, identity=key['identity'])
         except IOError:
             return failure()
-        log.debug('signature: %r', signature)
+        log.debug('signature: %b', signature)
+        log.debug('signature len: %d', len(signature))
 
         try:
             sig_bytes = key['verifier'](sig=signature, msg=blob)
@@ -167,5 +167,4 @@ class Handler:
             data = util.frame(key['type'], util.frame(sig_bytes))
         log.debug('data: %s', data)
         code = util.pack('B', msg_code('SSH2_AGENT_SIGN_RESPONSE'))
-        log.debug('code: %s', code)
         return util.frame(code, data)
