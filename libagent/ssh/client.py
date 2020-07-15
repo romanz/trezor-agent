@@ -23,10 +23,11 @@ class Client:
         public_keys = []
         with self.device:
             for i in identities:
-                pubkey = self.device.pubkey(identity=i)
                 if self.device.package_name() == 'onlykey-agent':
+                    pubkey = self.device.pubkey(identity=i, ssh=True)
                     vk = pubkey
                 else:
+                    pubkey = self.device.pubkey(identity=i)
                     vk = formats.decompress_pubkey(pubkey=pubkey,
                                                    curve_name=i.curve_name)
 
