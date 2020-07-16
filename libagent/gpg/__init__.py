@@ -207,10 +207,10 @@ fi
 
     # Generate new GPG identity and import into GPG keyring
     pubkey = write_file(os.path.join(homedir, 'pubkey.asc'),
-                        export_public_key(device_type, args))
+                                export_public_key(device_type, args))
     verbosity = ('-' + ('v' * args.verbose)) if args.verbose else '--quiet'
     check_call(keyring.gpg_command(['--homedir', homedir, verbosity,
-                                    '--import', pubkey.name]))
+                                '--import', pubkey.name]))
 
     # Make new GPG identity with "ultimate" trust (via its fingerprint)
     out = check_output(keyring.gpg_command(['--homedir', homedir,

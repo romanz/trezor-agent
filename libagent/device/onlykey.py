@@ -20,8 +20,8 @@ from ..gpg import keyring
 import ecdsa
 import nacl.signing
 import time
-import pgpy
-from pgpy import PGPKey
+#import pgpy
+#from pgpy import PGPKey
 
 
 log = logging.getLogger(__name__)
@@ -58,8 +58,8 @@ class OnlyKey(interface.Device):
     def import_pub(self, pubkey):
         self.import_pubkey = pubkey
         log.debug('Public key to import = %s', pubkey)
-        self.import_pubkey_obj, _ = pgpy.PGPKey.from_blob(pubkey)
-        self.import_pubkey_bytes = bytes(self.import_pubkey_obj)
+        #self.import_pubkey_obj, _ = pgpy.PGPKey.from_blob(pubkey)
+        #self.import_pubkey_bytes = bytes(self.import_pubkey_obj)
 
     def get_sk_dk(self):
         fpath = keyring.get_agent_sock_path()
@@ -258,7 +258,6 @@ class OnlyKey(interface.Device):
         b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
         
         log.info('Key Slot =%s', this_slot_id)
-        time.sleep(3)
 
         print ('%s signing %r (%s) on %s',
                   identity.to_string(), blob.hex(), curve_name, self)
@@ -317,20 +316,6 @@ class OnlyKey(interface.Device):
         data = h1.hexdigest()
         data = codecs.decode(data, 'hex_codec')
 
-        log.info('data hash =%s', data)
-        raw_message = pubkey + data
-        h2 = hashlib.sha256()
-        h2.update(raw_message)
-        d = h2.digest()
-        assert len(d) == 32
-
-        def get_button(byte):
-            return byte % 6 + 1
-
-        b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
-
-        log.info('blob to send', repr(raw_message))
-
         # Determine type of key to derive on OnlyKey for ecdh
         # Slot 132 used for derived key, slots 101-116 used for stored ecc keys, slots 1-4 used for stored RSA keys
         if (self.dkeyslot==132):
@@ -343,10 +328,25 @@ class OnlyKey(interface.Device):
             else:
                 this_slot_id = 203
                 log.info('Key type secp256k1')
+            raw_message = pubkey + data
         else:
             this_slot_id = self.dkeyslot
+            raw_message = pubkey
         
         log.info('Key Slot =%s', this_slot_id)
+
+        log.info('data hash =%s', data)
+        h2 = hashlib.sha256()
+        h2.update(raw_message)
+        d = h2.digest()
+        assert len(d) == 32
+
+        def get_button(byte):
+            return byte % 6 + 1
+
+        b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
+
+        log.info('blob to send', repr(raw_message))
 
         self.ok.send_large_message2(msg=self._defs.Message.OKDECRYPT, payload=raw_message, slot_id=this_slot_id)
 
