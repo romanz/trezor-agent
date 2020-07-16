@@ -5,6 +5,12 @@ import io
 import logging
 
 import ecdsa
+import Crypto.Hash
+import Crypto.PublicKey
+import Crypto.Signature
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256, SHA512
+from Crypto.PublicKey import RSA
 import nacl.signing
 
 from . import util
@@ -89,6 +95,7 @@ def parse_pubkey(blob):
 
     if key_type == SSH_ED25519_KEY_TYPE:
         pubkey = util.read_frame(s)
+        log.debug('ED25519 pubkey: %s', pubkey)
         assert s.read() == b''
 
         def ed25519_verify(sig, msg):
@@ -96,19 +103,34 @@ def parse_pubkey(blob):
             vk = nacl.signing.VerifyKey(bytes(pubkey),
                                         encoder=nacl.encoding.RawEncoder)
             vk.verify(msg, sig)
-            log.debug('verify signature')
+            log.debug('verify signature %s', sig)
             return sig
 
         result.update(curve=CURVE_ED25519, verifier=ed25519_verify)
 
 
     if key_type == SSH_RSA_KEY_TYPE:
-        pubkey = util.read_frame(s)
-        assert s.read() == b''
-
+        pubkey = blob
         log.debug('RSA pubkey: %s', pubkey)
 
-        result.update(curve=RSA, verifier=rsa_verify)
+        def rsa_verify(sig, msg):
+            pub = bytes(b'ssh-rsa ' + base64.b64encode(blob))
+            log.debug('RSA pubkey: %s', pub)
+            vk = Crypto.PublicKey.RSA.importKey(pub)
+            log.debug('message: %s', msg)
+            if b'rsa-sha2-512' in msg:
+                h = SHA512.new(msg)
+            elif b'rsa-sha2-256' in msg:
+                h = SHA256.new(msg)
+            log.debug('hash: %s', h.hexdigest())
+            try:
+                Crypto.Signature.pkcs1_15.new(vk).verify(h, sig)
+                log.debug('The RSA signature is valid.')
+            except (ValueError, TypeError):
+                log.debug('The RSA signature is not valid.')
+            return sig
+
+        result.update(verifier=rsa_verify)
 
     return result
 
@@ -192,6 +214,12 @@ def serialize_verifying_key(vk):
         blob = util.frame(SSH_ED25519_KEY_TYPE) + util.frame(pubkey)
         return key_type, blob
 
+    if (len(vk) == 279 or len(vk) == 535):
+        #RSA 2048 or RSA 4096
+        pubkey = vk
+        key_type = SSH_RSA_KEY_TYPE
+        return key_type, pubkey
+
     raise TypeError('unsupported {!r}'.format(vk))
 
 
@@ -226,4 +254,5 @@ def get_ecdh_curve_name(signature_curve_name):
         CURVE_NIST256: ECDH_NIST256,
         CURVE_ED25519: ECDH_CURVE25519,
         ECDH_CURVE25519: ECDH_CURVE25519,
+        RSA: RSA,
     }[signature_curve_name]
