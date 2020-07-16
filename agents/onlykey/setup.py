@@ -3,10 +3,10 @@ from setuptools import setup
 
 setup(
     name='onlykey_agent',
-    version='1.0.0',
+    version='0.11.0',
     description='Using onlykey as hardware SSH/GPG agent',
-    author='CryptoTrust',
-    author_email='t@crp.to',
+    author='Roman Zeyde',
+    author_email='roman.zeyde@gmail.com',
     url='http://github.com/romanz/trezor-agent',
     scripts=['onlykey_agent.py'],
     install_requires=[
