@@ -45,8 +45,8 @@ def export_public_key(device_type, args):
                                       curve_name=args.ecdsa_curve)
 
     if device_type.package_name() == 'onlykey-agent':
-        protocol.CUSTOM_KEY_LABEL = b'ONLYKEY-GPG-' + '{:x}'.format(device_type.skeyslot).encode() + '{:x}'.format(device_type.dkeyslot).encode() 
-        protocol.CUSTOM_SUBPACKET = protocol.subpacket(protocol.CUSTOM_SUBPACKET_ID, protocol.CUSTOM_KEY_LABEL)
+        if hasattr(device_type, 'import_pubkey'):
+            return device_type.import_pubkey
 
     verifying_key = c.pubkey(identity=identity, ecdh=False)
     decryption_key = c.pubkey(identity=identity, ecdh=True)
@@ -154,6 +154,9 @@ def run_init(device_type, args):
 
     # Prepare GPG agent invocation script (to pass the PATH from environment).
     if device_type.package_name() == 'onlykey-agent':
+        if args.import_pub != None:
+            with args.import_pub as f:
+                device_type.import_pub(device_type, f.read())
         with open(os.path.join(homedir, 'run-agent.sh'), 'w') as f:
             f.write(r"""#!/bin/sh
     export PATH="{0}"
@@ -259,8 +262,6 @@ def run_agent(device_type):
                        default=132,
                        help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
     else:
-        p.add_argument('--pin-entry-binary', type=str, default='pinentry',
-                       help='Path to PIN entry UI helper.')
         p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
                        help='Path to passphrase entry UI helper.')
         p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
@@ -336,6 +337,9 @@ def main(device_type):
         p.add_argument('-dk', '--dkey', type=int, metavar='DECRYPT_KEY',
                        default=132,
                        help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
+        p.add_argument('-i', '--import-pub', type=argparse.FileType('r'), metavar='IMPORT_PUBLIC_KEY',
+                       default=None,
+                       help='specify existing OpenPGP public key to use (Keybase and Protonmail keys supported)')
         p.add_argument('-t', '--time', type=int, default=0)
 
         p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
@@ -346,8 +350,6 @@ def main(device_type):
     else:
         p.add_argument('-e', '--ecdsa-curve', default='nist256p1')
         p.add_argument('-t', '--time', type=int, default=0)
-
-
         p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
                        help='Customize GnuPG home directory for the new identity.')
 

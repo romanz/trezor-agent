@@ -4,6 +4,8 @@ import logging
 
 from . import client, decode, keyring, protocol
 from .. import util
+import time
+import os
 
 log = logging.getLogger(__name__)
 
@@ -166,15 +168,18 @@ class Handler:
         curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
         ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
         identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-        if self.client.device.package_name() == 'onlykey-agent':
-            verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh, keygrip=self.pubkey_bytes)
-        else:
-            verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
+        verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
             verifying_key=verifying_key, ecdh=ecdh)
-        assert pubkey.key_id() == pubkey_dict['key_id']
-        assert pubkey.keygrip() == keygrip_bytes
+        log.debug('pub 1 %s', pubkey.key_id())
+        log.debug('pub 2 %s', pubkey_dict['key_id'])
+        log.debug('kg 1 %s', pubkey.keygrip())
+        log.debug('kg 2 %s', keygrip_bytes)
+        log.debug('id  %s', identity.to_string())
+        if self.client.device.package_name() != 'onlykey-agent':
+            assert pubkey.key_id() == pubkey_dict['key_id']
+            assert pubkey.keygrip() == keygrip_bytes
         return identity
 
     def pksign(self, conn):
@@ -189,9 +194,9 @@ class Handler:
 
     def pkdecrypt(self, conn):
         """Handle decryption using ECDH."""
+        
         for msg in [b'S INQUIRE_MAXLEN 4096', b'INQUIRE CIPHERTEXT']:
             keyring.sendline(conn, msg)
-
         line = keyring.recvline(conn)
         assert keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)
