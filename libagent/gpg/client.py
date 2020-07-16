@@ -22,11 +22,11 @@ class Client:
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, ecdh=False, keygrip=None):
         """Return public key as VerifyingKey object."""
         with self.device:
             if self.device.package_name() == 'onlykey-agent':
-                pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)
+                pubkey = self.device.pubkey(ecdh=ecdh, identity=identity, keygrip=keygrip)
                 public_key = pubkey
             else:
                 pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)

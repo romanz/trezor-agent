@@ -10,19 +10,13 @@ import codecs
 import struct
 import sys
 import unidecode
-import os.path
-from os import path
 
 from . import interface
 from .. import formats, util
-from ..gpg import keyring
 
 import ecdsa
 import nacl.signing
 import time
-import pgpy
-from pgpy import PGPKey
-
 
 log = logging.getLogger(__name__)
 
@@ -55,35 +49,6 @@ class OnlyKey(interface.Device):
         self.dkeyslot = dkey
         log.debug('Setting dkey slot = %s', dkey)
 
-    def import_pub(self, pubkey):
-        self.import_pubkey = pubkey
-        log.debug('Public key to import = %s', pubkey)
-        self.import_pubkey_obj, _ = pgpy.PGPKey.from_blob(pubkey)
-        self.import_pubkey_bytes = bytes(self.import_pubkey_obj)
-
-    def get_sk_dk(self):
-        fpath = keyring.get_agent_sock_path()
-        fpath = fpath.decode()
-        fpath = fpath.replace("S.gpg-agent", "run-agent.sh")
-        log.debug('Path to run-agent.sh = %s', fpath)
-        if path.exists(fpath):
-            with open(fpath) as f:
-                s = f.read()
-                if '--skey-slot=' in s:
-                    if s[s.find('--skey-slot=')+13:s.find('--skey-slot=')+14] == ' ':
-                        self.set_skey(int(s[s.find('--skey-slot=')+12:s.find('--skey-slot=')+13]))
-                    else:
-                        self.set_skey(int(s[s.find('--skey-slot=')+12:s.find('--skey-slot=')+15]))
-                if '--dkey-slot=' in s:
-                    if s[s.find('--dkey-slot=')+13:s.find('--dkey-slot=')+14] == ' ':
-                        self.set_dkey(int(s[s.find('--dkey-slot=')+12:s.find('--dkey-slot=')+13]))
-                    else:
-                        self.set_dkey(int(s[s.find('--dkey-slot=')+12:s.find('--dkey-slot=')+15]))
-        else:
-            self.set_skey(132)
-            self.set_dkey(132)
-
-
     def sighash(self, sighash):
         if sighash == b'rsa-sha2-512' or sighash == b'rsa-sha2-256':
             self.sighash = sighash
@@ -93,13 +58,14 @@ class OnlyKey(interface.Device):
         log.info('disconnected from %s', self.device_name)
         self.ok.close()
 
-    def pubkey(self, identity, ecdh=False, ssh=False):
+    def pubkey(self, identity, ecdh=False, keygrip=None):
         curve_name = identity.get_curve_name(ecdh=ecdh)
-    
-        if ssh == False and hasattr('self', 'skeyslot') == False:
-            self.get_sk_dk()
-            
-        if ssh == False and self.dkeyslot < 132 and ecdh==True:
+        if keygrip is not None and b'ONLYKEY-GPG' in keygrip:
+            log.info('found in keygrip')
+            self.set_skey(int(keygrip[keygrip.find(b'ONLYKEY-GPG')+12:keygrip.find(b'ONLYKEY-GPG')+14], 16))
+            self.set_dkey(int(keygrip[keygrip.find(b'ONLYKEY-GPG')+14:keygrip.find(b'ONLYKEY-GPG')+16], 16))
+
+        if self.dkeyslot < 132 and ecdh==True:
             this_slot_id=self.dkeyslot
             log.info('Key Slot =%s', this_slot_id)
         elif self.skeyslot < 132 and ecdh==False:
@@ -197,9 +163,6 @@ class OnlyKey(interface.Device):
         curve_name = identity.get_curve_name(ecdh=False)
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
-
-        if hasattr('self', 'skeyslot') == False:
-            self.get_sk_dk()
 
         if self.sighash == b'rsa-sha2-512':
             log.info('rsa-sha2-512')

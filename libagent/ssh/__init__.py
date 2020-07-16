@@ -267,9 +267,6 @@ def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
-    
-    if device_type.package_name() == 'onlykey-agent':
-        device_type.set_skey(device_type, args.skey)
 
     public_keys = None
     filename = None
@@ -281,6 +278,10 @@ def main(device_type):
         if filename.endswith('.pub'):
             public_keys = list(import_public_keys(contents))
         identities = list(parse_config(contents))
+    elif device_type.package_name() == 'onlykey-agent':
+        identities = [device.interface.Identity(
+            identity_str=args.identity, curve_name=args.ecdsa_curve_name)]
+        device_type.skey(device_type, args.skey)
     else:
         identities = [device.interface.Identity(
             identity_str=args.identity, curve_name=args.ecdsa_curve_name)]
