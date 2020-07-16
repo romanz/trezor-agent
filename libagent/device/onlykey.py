@@ -192,7 +192,7 @@ class OnlyKey(interface.Device):
             raise interface.DeviceError("Error response length is not a valid public key")
 
 
-    def sign(self, identity, blob):
+    def sign(self, identity, blob, ssh=False):
         """Sign given blob and return the signature (as bytes)."""
         curve_name = identity.get_curve_name(ecdh=False)
         log.debug('"%s" signing %r (%s) on %s',
@@ -253,7 +253,6 @@ class OnlyKey(interface.Device):
         print ('%s signing %r (%s) on %s',
                   identity.to_string(), blob.hex(), curve_name, self)
         print ('Enter the 3 digit challenge code on OnlyKey to authorize')
-        print ('{} {} {}'.format(b1, b2, b3))
 
         t_end = time.time() + 22
         if (curve_name != 'rsa'):
