@@ -51,9 +51,11 @@ class Client:
                  self.device)
         if self.device.package_name() == 'onlykey-agent':
             self.device.sighash(msg['key_type'])
-
-        with self.device:
-            return self.device.sign(blob=blob, identity=identity)
+            with self.device:
+                return self.device.sign(blob=blob, identity=identity, ssh=True)
+        else:
+            with self.device:
+                return self.device.sign(blob=blob, identity=identity)
 
 
 def _parse_ssh_blob(data):
