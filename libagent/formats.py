@@ -102,7 +102,7 @@ def parse_pubkey(blob):
             assert len(sig) == 64
             vk = nacl.signing.VerifyKey(bytes(pubkey),
                                         encoder=nacl.encoding.RawEncoder)
-            #vk.verify(msg, sig)
+            vk.verify(msg, sig)
             log.debug('verify signature %s', sig)
             return sig
 
@@ -216,6 +216,7 @@ def serialize_verifying_key(vk):
         key_type = SSH_ED25519_KEY_TYPE
         blob = util.frame(SSH_ED25519_KEY_TYPE) + util.frame(pubkey)
         return key_type, blob
+
 
     if (len(vk) == 279 or len(vk) == 535):
         #RSA 2048 or RSA 4096

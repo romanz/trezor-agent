@@ -225,18 +225,7 @@ class OnlyKey(interface.Device):
             h1.update(identity.to_bytes())
             data = h1.hexdigest()
             data = codecs.decode(data, 'hex_codec')
-            raw_message = blob + data
 
-        h2 = hashlib.sha256()
-        h2.update(raw_message)
-        d = h2.digest()
-
-        assert len(d) == 32
-
-        def get_button(byte):
-            return byte % 6 + 1
-
-        b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
 
         # Determine type of key to derive on OnlyKey for signature
         # Slot 132 used for derived key, slots 101-116 used for stored ecc keys, slots 1-4 used for stored RSA keys
@@ -250,14 +239,31 @@ class OnlyKey(interface.Device):
             else:
                 this_slot_id = 203
                 log.info('Key type secp256k1')
+            raw_message = blob + data
         else:
             this_slot_id = self.skeyslot
+            raw_message = blob
+
+        h2 = hashlib.sha256()
+        h2.update(raw_message)
+        d = h2.digest()
+
+        log.info('Identity hash =%s', h1.hexdigest())
+
+        assert len(d) == 32
+
+        def get_button(byte):
+            return byte % 6 + 1
+
+        b1, b2, b3 = get_button(d[0]), get_button(d[15]), get_button(d[31])
         
         log.info('Key Slot =%s', this_slot_id)
+        time.sleep(3)
 
         print ('%s signing %r (%s) on %s',
                   identity.to_string(), blob.hex(), curve_name, self)
         print ('Enter the 3 digit challenge code on OnlyKey to authorize')
+        print ('{} {} {}'.format(b1, b2, b3))
 
         t_end = time.time() + 22
         if (curve_name != 'rsa'):
