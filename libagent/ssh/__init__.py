@@ -79,20 +79,9 @@ def create_agent_parser(device_type):
                    action='version', version=versions)
 
     curve_names = ', '.join(sorted(formats.SUPPORTED_CURVES))
-
-    if agent_package == 'onlykey-agent':
-        p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
-                       default=formats.CURVE_ED25519,
-                       help='specify ECDSA/EDDSA curve name: ' + curve_names)
-        p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
-                       default=132,
-                       help='specify key to use for SSH signtature, 1-4 for RSA, 101-116 for ECC')
-
-    else:
-        p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
-                       default=formats.CURVE_NIST256,
-                       help='specify ECDSA/EDDSA curve name: ' + curve_names)
-
+    p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
+                   default=formats.CURVE_NIST256,
+                   help='specify ECDSA curve name: ' + curve_names)
     p.add_argument('--timeout',
                    default=UNIX_SOCKET_TIMEOUT, type=float,
                    help='timeout for accepting SSH client connections')
@@ -103,13 +92,12 @@ def create_agent_parser(device_type):
     p.add_argument('--sock-path', type=str,
                    help='Path to the UNIX domain socket of the agent.')
 
-    if agent_package != 'onlykey-agent':
-        p.add_argument('--pin-entry-binary', type=str, default='pinentry',
-                       help='Path to PIN entry UI helper.')
-        p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
-                       help='Path to passphrase entry UI helper.')
-        p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
-                       help='Expire passphrase from cache after this duration.')
+    p.add_argument('--pin-entry-binary', type=str, default='pinentry',
+                   help='Path to PIN entry UI helper.')
+    p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
+                   help='Path to passphrase entry UI helper.')
+    p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
+                   help='Expire passphrase from cache after this duration.')
 
     g = p.add_mutually_exclusive_group()
     g.add_argument('-d', '--daemonize', default=False, action='store_true',
@@ -270,7 +258,6 @@ def main(device_type):
 
     public_keys = None
     filename = None
-
     if args.identity.startswith('/'):
         filename = args.identity
         contents = open(filename, 'rb').read().decode('utf-8')
@@ -278,10 +265,6 @@ def main(device_type):
         if filename.endswith('.pub'):
             public_keys = list(import_public_keys(contents))
         identities = list(parse_config(contents))
-    elif device_type.package_name() == 'onlykey-agent':
-        identities = [device.interface.Identity(
-            identity_str=args.identity, curve_name=args.ecdsa_curve_name)]
-        device_type.skey(device_type, args.skey)
     else:
         identities = [device.interface.Identity(
             identity_str=args.identity, curve_name=args.ecdsa_curve_name)]

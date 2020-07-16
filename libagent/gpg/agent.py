@@ -167,7 +167,6 @@ class Handler:
         ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
 
         identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-
         verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
