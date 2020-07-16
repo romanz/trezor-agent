@@ -9,6 +9,7 @@ https://github.com/openssh/openssh-portable/blob/master/authfd.c
 """
 import io
 import logging
+import time
 
 from . import formats, util
 
@@ -145,7 +146,8 @@ class Handler:
             signature = self.conn.sign(blob=blob, identity=key['identity'])
         except IOError:
             return failure()
-        log.debug('signature: %r', signature)
+        log.debug('signature: %s', signature)
+        log.debug('signature len: %d', len(signature))
 
         try:
             sig_bytes = key['verifier'](sig=signature, msg=blob)
@@ -162,7 +164,7 @@ class Handler:
             else:
                 data = util.frame(util.frame(b'rsa-sha2-256'), util.frame(sig_bytes))
         else:
-            data = util.frame(key['type'], util.frame(sig_bytes))
+            data = util.frame(util.frame(key['type']), util.frame(sig_bytes))
         log.debug('data: %s', data)
         code = util.pack('B', msg_code('SSH2_AGENT_SIGN_RESPONSE'))
         return util.frame(code, data)

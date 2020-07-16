@@ -102,7 +102,7 @@ def parse_pubkey(blob):
             assert len(sig) == 64
             vk = nacl.signing.VerifyKey(bytes(pubkey),
                                         encoder=nacl.encoding.RawEncoder)
-            vk.verify(msg, sig)
+            #vk.verify(msg, sig)
             log.debug('verify signature %s', sig)
             return sig
 
@@ -120,8 +120,10 @@ def parse_pubkey(blob):
             log.debug('message: %s', msg)
             if b'rsa-sha2-512' in msg:
                 h = SHA512.new(msg)
+                log.debug('rsa-sha2-512')
             elif b'rsa-sha2-256' in msg:
                 h = SHA256.new(msg)
+                log.debug('rsa-sha2-256')
             log.debug('hash: %s', h.hexdigest())
             try:
                 Crypto.Signature.pkcs1_15.new(vk).verify(h, sig)
@@ -206,6 +208,7 @@ def serialize_verifying_key(vk):
         parts = [SSH_NIST256_KEY_TYPE, curve_name, key_blob]
         key_type = SSH_NIST256_KEY_TYPE
         blob = b''.join([util.frame(p) for p in parts])
+
         return key_type, blob
 
     if isinstance(vk, nacl.signing.VerifyKey):

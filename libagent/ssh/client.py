@@ -23,10 +23,11 @@ class Client:
         public_keys = []
         with self.device:
             for i in identities:
-                pubkey = self.device.pubkey(identity=i)
                 if self.device.package_name() == 'onlykey-agent':
+                    pubkey = self.device.pubkey(identity=i, ssh=True)
                     vk = pubkey
                 else:
+                    pubkey = self.device.pubkey(identity=i)
                     vk = formats.decompress_pubkey(pubkey=pubkey,
                                                    curve_name=i.curve_name)
 
@@ -50,9 +51,11 @@ class Client:
                  self.device)
         if self.device.package_name() == 'onlykey-agent':
             self.device.sighash(msg['key_type'])
-
-        with self.device:
-            return self.device.sign(blob=blob, identity=identity)
+            with self.device:
+                return self.device.sign(blob=blob, identity=identity, ssh=True)
+        else:
+            with self.device:
+                return self.device.sign(blob=blob, identity=identity)
 
 
 def _parse_ssh_blob(data):
