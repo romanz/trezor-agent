@@ -325,7 +325,7 @@ def main(device_type):
 
     p = subparsers.add_parser('init',
                               help='initialize hardware-based GnuPG identity')
-    p.add_argument('user_id')
+    p.add_argument('user_id', default=False)
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('-s', '--subkey', default=False, action='store_true')
 
@@ -372,8 +372,8 @@ def main(device_type):
     if agent_package == 'onlykey-agent':
         device_type.set_skey(device_type, args.skey)
         device_type.set_dkey(device_type, args.dkey)
-
-    device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
+    else:
+        device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     return args.func(device_type=device_type, args=args)
 
