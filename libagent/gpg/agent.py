@@ -161,6 +161,8 @@ class Handler:
         In case of missing keygrip, KeyError will be raised.
         """
         keygrip_bytes = binascii.unhexlify(keygrip)
+        #log.warning('Find keygrip(%s) in pubkey %s', keygrip_bytes, self.pubkey_bytes)
+        #time.sleep(7)
         pubkey_dict, user_ids = decode.load_by_keygrip(
             pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
         # We assume the first user ID is used to generate TREZOR-based GPG keys.
@@ -172,11 +174,6 @@ class Handler:
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
             verifying_key=verifying_key, ecdh=ecdh)
-        log.debug('pub 1 %s', pubkey.key_id())
-        log.debug('pub 2 %s', pubkey_dict['key_id'])
-        log.debug('kg 1 %s', pubkey.keygrip())
-        log.debug('kg 2 %s', keygrip_bytes)
-        log.debug('id  %s', identity.to_string())
         if self.client.device.package_name() != 'onlykey-agent':
             assert pubkey.key_id() == pubkey_dict['key_id']
             assert pubkey.keygrip() == keygrip_bytes

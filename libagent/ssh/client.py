@@ -24,7 +24,7 @@ class Client:
         with self.device:
             for i in identities:
                 if self.device.package_name() == 'onlykey-agent':
-                    pubkey = self.device.pubkey(identity=i, ssh=True)
+                    pubkey = self.device.pubkey(identity=i)
                     vk = pubkey
                 else:
                     pubkey = self.device.pubkey(identity=i)
@@ -52,7 +52,7 @@ class Client:
         if self.device.package_name() == 'onlykey-agent':
             self.device.sighash(msg['key_type'])
             with self.device:
-                return self.device.sign(blob=blob, identity=identity, ssh=True)
+                return self.device.sign(blob=blob, identity=identity)
         else:
             with self.device:
                 return self.device.sign(blob=blob, identity=identity)
