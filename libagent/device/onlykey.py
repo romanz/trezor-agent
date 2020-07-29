@@ -120,7 +120,10 @@ class OnlyKey(interface.Device):
 
         # Calculate hash for key derivation input data
         if identity.identity_dict['proto'] == 'ssh':
-            id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+            if identity.identity_dict.get('user'):
+                id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+            else:
+                id_parts = unidecode.unidecode(identity.identity_dict['host']).encode('ascii')
         else:
             id_parts = identity.to_bytes()
         log.info('Identity to hash =%s', id_parts)
@@ -232,7 +235,10 @@ class OnlyKey(interface.Device):
             # Calculate hash for key derivation input data
             h1 = hashlib.sha256()
             if identity.identity_dict['proto'] == 'ssh':
-                id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+                if identity.identity_dict.get('user'):
+                    id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+                else:
+                    id_parts = unidecode.unidecode(identity.identity_dict['host']).encode('ascii')
             else:
                 id_parts = identity.to_bytes()
             h1.update(id_parts)
@@ -321,7 +327,10 @@ class OnlyKey(interface.Device):
         # Calculate hash for key derivation input data
         h1 = hashlib.sha256()
         if identity.identity_dict['proto'] == 'ssh':
-            id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+            if identity.identity_dict.get('user'):
+                id_parts = unidecode.unidecode(identity.identity_dict['user'] + '@' + identity.identity_dict['host']).encode('ascii')
+            else:
+                id_parts = unidecode.unidecode(identity.identity_dict['host']).encode('ascii')
         else:
             id_parts = identity.to_bytes()
         h1.update(id_parts)
