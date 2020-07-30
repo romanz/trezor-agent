@@ -208,7 +208,6 @@ class PublicKey:
         self.created = int(created)  # time since Epoch
         self.verifying_key = verifying_key
 
-
     def keygrip(self):
         """Compute GPG keygrip of the verifying key."""
         return self.curve_info['keygrip'](self.verifying_key)
@@ -223,9 +222,10 @@ class PublicKey:
             oid = util.prefix_len('>B', self.curve_info['oid'])
             blob = self.curve_info['serialize'](self.verifying_key)
             return header + oid + blob + self.ecdh_packet
-        else: # RSA
-            blob = mpi((4 << 512) | util.bytes2num(self.verifying_key))
-            return header + blob
+        #else: # RSA
+            #TODO Implement RSA GPG 
+            #blob = util.bytes2num(self.verifying_key))
+            #return header + blob
 
     def data_to_hash(self):
         """Data for digest computation."""

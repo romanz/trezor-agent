@@ -325,7 +325,7 @@ def main(device_type):
 
     p = subparsers.add_parser('init',
                               help='initialize hardware-based GnuPG identity')
-    p.add_argument('user_id', default=False)
+    p.add_argument('user_id')
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('-s', '--subkey', default=False, action='store_true')
 

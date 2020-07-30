@@ -117,10 +117,10 @@ Then, install the latest [keepkey_agent](https://pypi.python.org/pypi/keepkey_ag
  * [OnlyKey Firmware Upgrade Guide](https://docs.crp.to/upgradeguide.html)
 
 2. Make sure that your `udev` rules are configured [correctly](https://docs.crp.to/linux.html#udev-rule).
-3. Then, install the latest [onlykey_agent](https://pypi.python.org/pypi/onlykey_agent) package:
+3. Then, install the latest [onlykey-agent](https://pypi.python.org/pypi/onlykey-agent) package:
 
     ```
-    $ pip3 install onlykey_agent
+    $ pip3 install onlykey-agent
     ```
 
     Or, directly from the latest source code:

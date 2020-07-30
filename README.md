@@ -25,7 +25,7 @@ agents to interact with several different hardware devices:
 * [`trezor-agent`](https://pypi.org/project/trezor-agent/): Using Trezor as hardware-based SSH/PGP agent
 * [`ledger_agent`](https://pypi.org/project/ledger_agent/): Using Ledger as hardware-based SSH/PGP agent
 * [`keepkey_agent`](https://pypi.org/project/keepkey_agent/): Using KeepKey as hardware-based SSH/PGP agent
-* [`onlykey_agent`](https://pypi.org/project/onlykey_agent/): Using OnlyKey as hardware-based SSH/PGP agent
+* [`onlykey-agent`](https://pypi.org/project/onlykey-agent/): Using OnlyKey as hardware-based SSH/PGP agent
 
 
 The [/releases](/releases) page on Github contains the `libagent`

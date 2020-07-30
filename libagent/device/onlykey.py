@@ -418,29 +418,6 @@ _identity_regexp = re.compile(''.join([
     '$'
 ]))
 
-def string_to_identity(s, identity_type=dict):
-    """Parse string into Identity protobuf."""
-    m = _identity_regexp.match(s)
-    result = m.groupdict()
-    log.debug('parsed identity: %s', result)
-    kwargs = {k: v for k, v in result.items() if v}
-    return identity_type(**kwargs)
-
-def _parse_ssh_blob(data):
-    res = {}
-    i = io.BytesIO(data)
-    res['nonce'] = util.read_frame(i)
-    i.read(1)  # SSH2_MSG_USERAUTH_REQUEST == 50 (from ssh2.h, line 108)
-    res['user'] = util.read_frame(i)
-    res['conn'] = util.read_frame(i)
-    res['auth'] = util.read_frame(i)
-    i.read(1)  # have_sig == 1 (from sshconnect2.c, line 1056)
-    res['key_type'] = util.read_frame(i)
-    public_key = util.read_frame(i)
-    res['public_key'] = formats.parse_pubkey(public_key)
-    assert not i.read()
-    return res
-
 def get_button(self, byte):
     if (str(self.okversion) == 'v0.2-beta.8c'):
         return byte % 5 + 1
@@ -448,9 +425,3 @@ def get_button(self, byte):
         return byte % 6 + 1
 
 
-def bytes2num(s):
-    """Convert MSB-first bytes to an unsigned integer."""
-    res = 0
-    for i, c in enumerate(reversed(bytearray(s))):
-        res += c << (i * 8)
-    return res
