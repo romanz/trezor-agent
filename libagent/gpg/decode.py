@@ -67,10 +67,8 @@ def _parse_ed25519_pubkey(mpi):
     prefix, value = util.split_bits(mpi, 8, 256)
     if prefix != 0x40:
         raise ValueError('Invalid MPI prefix: {}'.format(prefix))
-    vk = nacl.signing.VerifyKey(util.num2bytes(value, size=32),
+    return nacl.signing.VerifyKey(util.num2bytes(value, size=32),
                                     encoder=nacl.encoding.RawEncoder)
-    log.debug('_parse_ed25519_pubkey %s', vk.encode(encoder=nacl.encoding.RawEncoder))
-    return vk
 
 
 SUPPORTED_CURVES = {

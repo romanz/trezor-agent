@@ -202,7 +202,6 @@ else
     ${{COMMAND}}
 fi
 """.format(homedir))
-
     check_call(['chmod', '700', f.name])
 
     # Generate new GPG identity and import into GPG keyring
@@ -223,7 +222,8 @@ fi
                                     '--import-ownertrust', f.name]))
     
     # Load agent and make sure it responds with the new identity
-    check_call(keyring.gpg_command(['--homedir', homedir, '--list-secret-keys', args.user_id]))
+    check_call(keyring.gpg_command(['--homedir', homedir,
+                                    '--list-secret-keys', args.user_id]))
 
 
 

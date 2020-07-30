@@ -101,6 +101,7 @@ class Identity:
         else:
             return self.curve_name
 
+
 class Device:
     """Abstract cryptographic hardware device interface."""
 

@@ -273,7 +273,6 @@ def main(device_type):
 
     public_keys = None
     filename = None
-
     if args.identity.startswith('/'):
         filename = args.identity
         contents = open(filename, 'rb').read().decode('utf-8')

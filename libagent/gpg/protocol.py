@@ -126,7 +126,6 @@ def keygrip_nist256(vk):
 def keygrip_ed25519(vk):
     """Compute keygrip for Ed25519 public keys."""
     # pylint: disable=line-too-long
-    log.debug('keygrip_ed25519 %s', vk.encode(encoder=nacl.encoding.RawEncoder))
     return _compute_keygrip([
         ['p', util.num2bytes(0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED, size=32)],  # nopep8
         ['a', b'\x01'],
