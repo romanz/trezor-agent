@@ -161,14 +161,13 @@ class Handler:
         In case of missing keygrip, KeyError will be raised.
         """
         keygrip_bytes = binascii.unhexlify(keygrip)
-        #log.warning('Find keygrip(%s) in pubkey %s', keygrip_bytes, self.pubkey_bytes)
-        #time.sleep(7)
         pubkey_dict, user_ids = decode.load_by_keygrip(
             pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
         # We assume the first user ID is used to generate TREZOR-based GPG keys.
         user_id = user_ids[0]['value'].decode('utf-8')
         curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
         ecdh = (pubkey_dict['algo'] == protocol.ECDH_ALGO_ID)
+
         identity = client.create_identity(user_id=user_id, curve_name=curve_name)
         verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
         pubkey = protocol.PublicKey(
@@ -191,9 +190,9 @@ class Handler:
 
     def pkdecrypt(self, conn):
         """Handle decryption using ECDH."""
-        
         for msg in [b'S INQUIRE_MAXLEN 4096', b'INQUIRE CIPHERTEXT']:
             keyring.sendline(conn, msg)
+            
         line = keyring.recvline(conn)
         assert keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)

@@ -58,12 +58,9 @@ def parse_pubkey(blob):
     The verifier returns the signatures in the required SSH format.
     Currently, NIST256P1 and ED25519 elliptic curves are supported.
     """
-
     fp = fingerprint(blob)
     s = io.BytesIO(blob)
     key_type = util.read_frame(s)
-
-
     assert key_type in SUPPORTED_KEY_TYPES, key_type
 
     result = {'blob': blob, 'type': key_type, 'fingerprint': fp}
@@ -95,7 +92,6 @@ def parse_pubkey(blob):
 
     if key_type == SSH_ED25519_KEY_TYPE:
         pubkey = util.read_frame(s)
-        log.debug('ED25519 pubkey: %s', pubkey)
         assert s.read() == b''
 
         def ed25519_verify(sig, msg):
@@ -202,21 +198,19 @@ def serialize_verifying_key(vk):
     Currently, NIST256P1 and ED25519 elliptic curves are supported.
     Raise TypeError on unsupported key format.
     """
-    if isinstance(vk, ecdsa.keys.VerifyingKey):
-        curve_name = SSH_NIST256_CURVE_NAME
-        key_blob = SSH_NIST256_DER_OCTET + vk.to_string()
-        parts = [SSH_NIST256_KEY_TYPE, curve_name, key_blob]
-        key_type = SSH_NIST256_KEY_TYPE
-        blob = b''.join([util.frame(p) for p in parts])
-
-        return key_type, blob
-
     if isinstance(vk, nacl.signing.VerifyKey):
         pubkey = vk.encode(encoder=nacl.encoding.RawEncoder)
         key_type = SSH_ED25519_KEY_TYPE
         blob = util.frame(SSH_ED25519_KEY_TYPE) + util.frame(pubkey)
         return key_type, blob
 
+    if isinstance(vk, ecdsa.keys.VerifyingKey):
+        curve_name = SSH_NIST256_CURVE_NAME
+        key_blob = SSH_NIST256_DER_OCTET + vk.to_string()
+        parts = [SSH_NIST256_KEY_TYPE, curve_name, key_blob]
+        key_type = SSH_NIST256_KEY_TYPE
+        blob = b''.join([util.frame(p) for p in parts])
+        return key_type, blob
 
     if (len(vk) == 279 or len(vk) == 535):
         #RSA 2048 or RSA 4096
