@@ -4,8 +4,6 @@ import logging
 
 from . import client, decode, keyring, protocol
 from .. import util
-import time
-import os
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +190,7 @@ class Handler:
         """Handle decryption using ECDH."""
         for msg in [b'S INQUIRE_MAXLEN 4096', b'INQUIRE CIPHERTEXT']:
             keyring.sendline(conn, msg)
-            
+
         line = keyring.recvline(conn)
         assert keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)
