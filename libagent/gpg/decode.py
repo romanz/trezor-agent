@@ -7,7 +7,7 @@ import logging
 import struct
 
 import ecdsa
-import nacl.signing
+import ed25519
 
 from . import protocol
 from .. import util
@@ -67,8 +67,7 @@ def _parse_ed25519_pubkey(mpi):
     prefix, value = util.split_bits(mpi, 8, 256)
     if prefix != 0x40:
         raise ValueError('Invalid MPI prefix: {}'.format(prefix))
-    return nacl.signing.VerifyKey(util.num2bytes(value, size=32),
-                                    encoder=nacl.encoding.RawEncoder)
+    return ed25519.VerifyingKey(util.num2bytes(value, size=32))
 
 
 SUPPORTED_CURVES = {

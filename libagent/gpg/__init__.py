@@ -20,12 +20,6 @@ import time
 
 import pkg_resources
 import semver
-import Crypto.Hash
-import Crypto.PublicKey
-import Crypto.Signature
-from Crypto.Signature import pkcs1_15
-from Crypto.Hash import SHA256, SHA512
-from Crypto.PublicKey import RSA
 import base64
 
 
@@ -43,10 +37,6 @@ def export_public_key(device_type, args):
     c = client.Client(device=device_type())
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
-
-    if device_type.package_name() == 'onlykey-agent':
-        if hasattr(device_type, 'import_pubkey'):
-            return device_type.import_pubkey
 
     verifying_key = c.pubkey(identity=identity, ecdh=False)
     decryption_key = c.pubkey(identity=identity, ecdh=True)
@@ -337,9 +327,6 @@ def main(device_type):
         p.add_argument('-dk', '--dkey', type=int, metavar='DECRYPT_KEY',
                        default=132,
                        help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
-        p.add_argument('-i', '--import-pub', type=argparse.FileType('r'), metavar='IMPORT_PUBLIC_KEY',
-                       default=None,
-                       help='specify existing OpenPGP public key to use (Keybase and Protonmail keys supported)')
         p.add_argument('-t', '--time', type=int, default=0)
 
         p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
@@ -376,4 +363,3 @@ def main(device_type):
         device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     return args.func(device_type=device_type, args=args)
-
