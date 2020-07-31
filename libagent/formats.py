@@ -5,28 +5,20 @@ import io
 import logging
 
 import ecdsa
-import Crypto.Hash
-import Crypto.PublicKey
-import Crypto.Signature
-from Crypto.Signature import pkcs1_15
-from Crypto.Hash import SHA256, SHA512
-from Crypto.PublicKey import RSA
-import nacl.signing
+import ed25519
 
 from . import util
 
 log = logging.getLogger(__name__)
 
-# Supported algorithms for SSH and GPG (ECC Curves and RSA)
+# Supported ECDSA curves (for SSH and GPG)
 CURVE_NIST256 = 'nist256p1'
 CURVE_ED25519 = 'ed25519'
-RSA = 'rsa'
-SUPPORTED_CURVES = {CURVE_NIST256, CURVE_ED25519, RSA}
+SUPPORTED_CURVES = {CURVE_NIST256, CURVE_ED25519}
 
-# Supported algorithms for GPG
+# Supported ECDH curves (for GPG)
 ECDH_NIST256 = 'nist256p1'
 ECDH_CURVE25519 = 'curve25519'
-RSA = 'rsa'
 
 # SSH key types
 SSH_NIST256_DER_OCTET = b'\x04'
@@ -34,8 +26,7 @@ SSH_NIST256_KEY_PREFIX = b'ecdsa-sha2-'
 SSH_NIST256_CURVE_NAME = b'nistp256'
 SSH_NIST256_KEY_TYPE = SSH_NIST256_KEY_PREFIX + SSH_NIST256_CURVE_NAME
 SSH_ED25519_KEY_TYPE = b'ssh-ed25519'
-SSH_RSA_KEY_TYPE = b'ssh-rsa'
-SUPPORTED_KEY_TYPES = {SSH_NIST256_KEY_TYPE, SSH_ED25519_KEY_TYPE, SSH_RSA_KEY_TYPE}
+SUPPORTED_KEY_TYPES = {SSH_NIST256_KEY_TYPE, SSH_ED25519_KEY_TYPE}
 
 hashfunc = hashlib.sha256
 
@@ -61,6 +52,7 @@ def parse_pubkey(blob):
     fp = fingerprint(blob)
     s = io.BytesIO(blob)
     key_type = util.read_frame(s)
+    log.debug('key type: %s', key_type)
     assert key_type in SUPPORTED_KEY_TYPES, key_type
 
     result = {'blob': blob, 'type': key_type, 'fingerprint': fp}
@@ -96,39 +88,11 @@ def parse_pubkey(blob):
 
         def ed25519_verify(sig, msg):
             assert len(sig) == 64
-            vk = nacl.signing.VerifyKey(bytes(pubkey),
-                                        encoder=nacl.encoding.RawEncoder)
-            vk.verify(msg, sig)
-            log.debug('verify signature %s', sig)
+            vk = ed25519.VerifyingKey(pubkey)
+            vk.verify(sig, msg)
             return sig
 
         result.update(curve=CURVE_ED25519, verifier=ed25519_verify)
-
-
-    if key_type == SSH_RSA_KEY_TYPE:
-        pubkey = blob
-        log.debug('RSA pubkey: %s', pubkey)
-
-        def rsa_verify(sig, msg):
-            pub = bytes(b'ssh-rsa ' + base64.b64encode(blob))
-            log.debug('RSA pubkey: %s', pub)
-            vk = Crypto.PublicKey.RSA.importKey(pub)
-            log.debug('message: %s', msg)
-            if b'rsa-sha2-512' in msg:
-                h = SHA512.new(msg)
-                log.debug('rsa-sha2-512')
-            elif b'rsa-sha2-256' in msg:
-                h = SHA256.new(msg)
-                log.debug('rsa-sha2-256')
-            log.debug('hash: %s', h.hexdigest())
-            try:
-                Crypto.Signature.pkcs1_15.new(vk).verify(h, sig)
-                log.debug('The RSA signature is valid.')
-            except (ValueError, TypeError):
-                log.debug('The RSA signature is not valid.')
-            return sig
-
-        result.update(verifier=rsa_verify)
 
     return result
 
@@ -137,8 +101,7 @@ def _decompress_ed25519(pubkey):
     """Load public key from the serialized blob (stripping the prefix byte)."""
     if pubkey[:1] == b'\x00':
         # set by Trezor fsm_msgSignIdentity() and fsm_msgGetPublicKey()
-        return nacl.signing.VerifyKey(pubkey[1:],
-                                    encoder=nacl.encoding.RawEncoder)
+        return ed25519.VerifyingKey(pubkey[1:])
     else:
         return None
 
@@ -198,8 +161,8 @@ def serialize_verifying_key(vk):
     Currently, NIST256P1 and ED25519 elliptic curves are supported.
     Raise TypeError on unsupported key format.
     """
-    if isinstance(vk, nacl.signing.VerifyKey):
-        pubkey = vk.encode(encoder=nacl.encoding.RawEncoder)
+    if isinstance(vk, ed25519.keys.VerifyingKey):
+        pubkey = vk.to_bytes()
         key_type = SSH_ED25519_KEY_TYPE
         blob = util.frame(SSH_ED25519_KEY_TYPE) + util.frame(pubkey)
         return key_type, blob
@@ -211,12 +174,6 @@ def serialize_verifying_key(vk):
         key_type = SSH_NIST256_KEY_TYPE
         blob = b''.join([util.frame(p) for p in parts])
         return key_type, blob
-
-    if (len(vk) == 279 or len(vk) == 535):
-        #RSA 2048 or RSA 4096
-        pubkey = vk
-        key_type = SSH_RSA_KEY_TYPE
-        return key_type, pubkey
 
     raise TypeError('unsupported {!r}'.format(vk))
 
@@ -252,5 +209,4 @@ def get_ecdh_curve_name(signature_curve_name):
         CURVE_NIST256: ECDH_NIST256,
         CURVE_ED25519: ECDH_CURVE25519,
         ECDH_CURVE25519: ECDH_CURVE25519,
-        RSA: RSA,
     }[signature_curve_name]
