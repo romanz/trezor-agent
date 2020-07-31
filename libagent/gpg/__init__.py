@@ -20,7 +20,6 @@ import time
 
 import pkg_resources
 import semver
-import base64
 
 
 from . import agent, client, encode, keyring, protocol
@@ -37,7 +36,6 @@ def export_public_key(device_type, args):
     c = client.Client(device=device_type())
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
-
     verifying_key = c.pubkey(identity=identity, ecdh=False)
     decryption_key = c.pubkey(identity=identity, ecdh=True)
     signer_func = functools.partial(c.sign, identity=identity)
@@ -144,9 +142,6 @@ def run_init(device_type, args):
 
     # Prepare GPG agent invocation script (to pass the PATH from environment).
     if device_type.package_name() == 'onlykey-agent':
-        if args.import_pub != None:
-            with args.import_pub as f:
-                device_type.import_pub(device_type, f.read())
         with open(os.path.join(homedir, 'run-agent.sh'), 'w') as f:
             f.write(r"""#!/bin/sh
     export PATH="{0}"
@@ -196,10 +191,10 @@ fi
 
     # Generate new GPG identity and import into GPG keyring
     pubkey = write_file(os.path.join(homedir, 'pubkey.asc'),
-                                export_public_key(device_type, args))
+                        export_public_key(device_type, args))
     verbosity = ('-' + ('v' * args.verbose)) if args.verbose else '--quiet'
     check_call(keyring.gpg_command(['--homedir', homedir, verbosity,
-                                '--import', pubkey.name]))
+                                    '--import', pubkey.name]))
 
     # Make new GPG identity with "ultimate" trust (via its fingerprint)
     out = check_output(keyring.gpg_command(['--homedir', homedir,
@@ -210,11 +205,10 @@ fi
     f = write_file(os.path.join(homedir, 'ownertrust.txt'), fpr + ':6\n')
     check_call(keyring.gpg_command(['--homedir', homedir,
                                     '--import-ownertrust', f.name]))
-    
+
     # Load agent and make sure it responds with the new identity
     check_call(keyring.gpg_command(['--homedir', homedir,
                                     '--list-secret-keys', args.user_id]))
-
 
 
 def run_unlock(device_type, args):

@@ -127,7 +127,6 @@ class Handler:
         key = formats.parse_pubkey(util.read_frame(buf))
         log.debug('looking for %s', key['fingerprint'])
         blob = util.read_frame(buf)
-
         assert util.read_frame(buf) == b''
         assert not buf.read()
 

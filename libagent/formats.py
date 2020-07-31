@@ -16,10 +16,9 @@ CURVE_NIST256 = 'nist256p1'
 CURVE_ED25519 = 'ed25519'
 SUPPORTED_CURVES = {CURVE_NIST256, CURVE_ED25519}
 
-# Supported algorithms for GPG
+# Supported ECDH curves (for GPG)
 ECDH_NIST256 = 'nist256p1'
 ECDH_CURVE25519 = 'curve25519'
-RSA = 'rsa'
 
 # SSH key types
 SSH_NIST256_DER_OCTET = b'\x04'
