@@ -241,10 +241,10 @@ def run_agent(device_type):
     if device_type.package_name() == 'onlykey-agent':
         p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
                        default=132,
-                       help='specify key to use for signing, 1-4 for RSA, 101-116 for ECC')
+                       help='specify key to use for signing')
         p.add_argument('-dk', '--dkey', type=int, metavar='DECRYPT_KEY',
                        default=132,
-                       help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
+                       help='specify key to use for decryption')
     else:
         p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
                        help='Path to passphrase entry UI helper.')
@@ -317,10 +317,10 @@ def main(device_type):
         p.add_argument('-e', '--ecdsa-curve', default='ed25519')
         p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
                        default=132,
-                       help='specify key to use for signing, 1-4 for RSA, 101-116 for ECC')
+                       help='specify key to use for signing')
         p.add_argument('-dk', '--dkey', type=int, metavar='DECRYPT_KEY',
                        default=132,
-                       help='specify key to use for decryption, 1-4 for RSA, 101-116 for ECC')
+                       help='specify key to use for decryption')
         p.add_argument('-t', '--time', type=int, default=0)
 
         p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
