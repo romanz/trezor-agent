@@ -71,11 +71,11 @@ def export_public_key(device_type, args):
             created=args.time, verifying_key=decryption_key, ecdh=True)
 
         result = encode.create_primary(user_id=args.user_id,
-                                        pubkey=primary,
-                                        signer_func=signer_func)
+                                       pubkey=primary,
+                                       signer_func=signer_func)
         result = encode.create_subkey(primary_bytes=result,
-                                        subkey=subkey,
-                                        signer_func=signer_func)
+                                       subkey=subkey,
+                                       signer_func=signer_func)
 
     return protocol.armor(result, 'PUBLIC KEY BLOCK')
 
@@ -119,7 +119,7 @@ def run_init(device_type, args):
                 'so please note that the API and features may '
                 'change without backwards compatibility!')
 
-    verify_gpg_version()    
+    verify_gpg_version()
 
     # Prepare new GPG home directory for hardware-based identity
     device_name = os.path.basename(sys.argv[0]).rsplit('-', 1)[0]

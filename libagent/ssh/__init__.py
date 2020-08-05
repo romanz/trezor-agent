@@ -267,7 +267,6 @@ def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
-    
     if device_type.package_name() == 'onlykey-agent':
         device_type.set_skey(device_type, args.skey)
 
