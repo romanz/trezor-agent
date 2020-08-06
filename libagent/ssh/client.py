@@ -50,7 +50,8 @@ class Client:
                  msg['user'].decode('ascii'), identity.to_string(),
                  self.device)
         if self.device.package_name() == 'onlykey-agent':
-            self.device.sighash(msg['key_type'])
+            # signature hash type required for RSA
+            self.device.sig_hash(msg['key_type'])
             with self.device:
                 return self.device.sign(blob=blob, identity=identity)
         else:
