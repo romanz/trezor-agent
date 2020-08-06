@@ -18,7 +18,7 @@ from .. import formats, util
 from ..gpg import keyring
 
 import ecdsa
-import ed25519
+import pynacl
 import time
 # import pgpy
 # from pgpy import PGPKey
@@ -146,7 +146,7 @@ class OnlyKey(interface.Device):
         self.ok.send_message(msg=self._defs.Message.OKGETPUBKEY, slot_id=this_slot_id, payload=data)
         log.info('curve name= %s', repr(curve_name))
         t_end = time.time() + 1.5
-        if (curve_name != 'rsa'):
+        if curve_name != 'rsa':
             while time.time() < t_end:
                 try:
                     ok_pubkey = self.ok.read_bytes(timeout_ms=100)
@@ -245,7 +245,7 @@ class OnlyKey(interface.Device):
         # Determine type of key to derive on OnlyKey for signature
         # Slot 132 used for derived key, slots 101-116 used for stored ecc keys
         # slots 1-4 used for stored RSA keys
-        if (self.skeyslot == 132):
+        if self.skeyslot == 132:
             if curve_name == 'ed25519':
                 this_slot_id = 201
                 log.info('Key type ed25519')
@@ -270,7 +270,7 @@ class OnlyKey(interface.Device):
         print('Enter the 3 digit challenge code on OnlyKey to authorize '+identity.to_string())
         print('{} {} {}'.format(b1, b2, b3))
         t_end = time.time() + 22
-        if (curve_name != 'rsa'):
+        if curve_name != 'rsa':
             self.ok.send_large_message2(msg=self._defs.Message.OKSIGN, payload=raw_message,
                                         slot_id=this_slot_id)
             while time.time() < t_end:
@@ -332,7 +332,7 @@ class OnlyKey(interface.Device):
         # Determine type of key to derive on OnlyKey for ecdh
         # Slot 132 used for derived key, slots 101-116 used for stored ecc keys,
         # slots 1-4 used for stored RSA keys
-        if (self.dkeyslot == 132):
+        if self.dkeyslot == 132:
             if curve_name == 'curve25519':
                 this_slot_id = 204
                 log.info('Key type curve25519')
@@ -359,7 +359,7 @@ class OnlyKey(interface.Device):
         print('Enter the 3 digit challenge code on OnlyKey to authorize ' + identity.to_string())
         print('{} {} {}'.format(b1, b2, b3))
         t_end = time.time() + 22
-        if (curve_name != 'rsa'):
+        if curve_name != 'rsa':
             while time.time() < t_end:
                 try:
                     result = self.ok.read_bytes(timeout_ms=100)
@@ -392,7 +392,7 @@ class OnlyKey(interface.Device):
 
 
 def get_button(self, byte):
-    if (str(self.okversion) == 'v0.2-beta.8c'):
+    if str(self.okversion) == 'v0.2-beta.8c':
         return byte % 5 + 1
     else:
         return byte % 6 + 1
