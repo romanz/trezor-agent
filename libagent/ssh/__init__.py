@@ -79,9 +79,20 @@ def create_agent_parser(device_type):
                    action='version', version=versions)
 
     curve_names = ', '.join(sorted(formats.SUPPORTED_CURVES))
-    p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
-                   default=formats.CURVE_NIST256,
-                   help='specify ECDSA curve name: ' + curve_names)
+
+    if agent_package == 'onlykey-agent':
+        p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
+                       default=formats.CURVE_ED25519,
+                       help='specify ECDSA/EDDSA curve name: ' + curve_names)
+        p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
+                       default=132,
+                       help='specify key to use for SSH signtature, 1-4 for RSA, 101-116 for ECC')
+
+    else:
+        p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
+                       default=formats.CURVE_NIST256,
+                       help='specify ECDSA/EDDSA curve name: ' + curve_names)
+
     p.add_argument('--timeout',
                    default=UNIX_SOCKET_TIMEOUT, type=float,
                    help='timeout for accepting SSH client connections')
@@ -92,12 +103,13 @@ def create_agent_parser(device_type):
     p.add_argument('--sock-path', type=str,
                    help='Path to the UNIX domain socket of the agent.')
 
-    p.add_argument('--pin-entry-binary', type=str, default='pinentry',
-                   help='Path to PIN entry UI helper.')
-    p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
-                   help='Path to passphrase entry UI helper.')
-    p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
-                   help='Expire passphrase from cache after this duration.')
+    if agent_package != 'onlykey-agent':
+        p.add_argument('--pin-entry-binary', type=str, default='pinentry',
+                       help='Path to PIN entry UI helper.')
+        p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
+                       help='Path to passphrase entry UI helper.')
+        p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
+                       help='Expire passphrase from cache after this duration.')
 
     g = p.add_mutually_exclusive_group()
     g.add_argument('-d', '--daemonize', default=False, action='store_true',
@@ -255,6 +267,8 @@ def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
+    if device_type.package_name() == 'onlykey-agent':
+        device_type.set_skey(device_type, args.skey)
 
     public_keys = None
     filename = None
@@ -272,8 +286,9 @@ def main(device_type):
         identity.identity_dict['proto'] = u'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
 
-    # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
-    device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
+    if device_type.package_name() != 'onlykey-agent':
+        # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
+        device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     conn = JustInTimeConnection(
         conn_factory=lambda: client.Client(device_type()),

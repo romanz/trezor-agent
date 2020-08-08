@@ -151,7 +151,7 @@ class Handler:
             log.info('signature status: OK')
         except formats.ecdsa.BadSignatureError:
             log.exception('signature status: ERROR')
-            raise ValueError('invalid ECDSA signature')
+            raise ValueError('invalid signature')
 
         log.debug('signature size: %d bytes', len(sig_bytes))
 
