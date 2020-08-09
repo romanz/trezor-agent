@@ -86,7 +86,7 @@ def create_agent_parser(device_type):
                        help='specify ECDSA/EDDSA curve name: ' + curve_names)
         p.add_argument('-sk', '--skey', type=int, metavar='SIGN_KEY',
                        default=132,
-                       help='specify key to use for SSH signtature, 1-4 for RSA, 101-116 for ECC')
+                       help='specify key to use for SSH signtature')
 
     else:
         p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
