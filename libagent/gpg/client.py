@@ -25,9 +25,14 @@ class Client:
     def pubkey(self, identity, ecdh=False):
         """Return public key as VerifyingKey object."""
         with self.device:
-            pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)
-        return formats.decompress_pubkey(
-            pubkey=pubkey, curve_name=identity.curve_name)
+            if self.device.package_name() == 'onlykey-agent':
+                pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)
+                public_key = pubkey
+            else:
+                pubkey = self.device.pubkey(ecdh=ecdh, identity=identity)
+                public_key = formats.decompress_pubkey(pubkey=pubkey,
+                                                       curve_name=identity.curve_name)
+        return public_key
 
     def sign(self, identity, digest):
         """Sign the digest and return a serialized signature."""
