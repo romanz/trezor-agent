@@ -40,6 +40,8 @@ class OnlyKey(interface.Device):
             self.ok.set_time(time.time())
             self.okversion = self.ok.read_string(timeout_ms=500)
             self.okversion = self.okversion[8:]
+            self.skeyslot = 132
+            self.dkeyslot = 132
         except Exception:
             raise interface.NotFoundError('{} not connected: "{}"')
 
