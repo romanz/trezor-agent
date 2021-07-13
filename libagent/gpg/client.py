@@ -22,10 +22,10 @@ class Client:
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, keyflag=formats.KeyFlags.CERTIFY):
         """Return public key as VerifyingKey object."""
         with self.device:
-            return self.device.pubkey(ecdh=ecdh, identity=identity)
+            return self.device.pubkey(keyflag=keyflag, identity=identity)
 
     def sign(self, identity, digest):
         """Sign the digest and return a serialized signature."""

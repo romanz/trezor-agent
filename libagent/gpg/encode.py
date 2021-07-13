@@ -2,7 +2,7 @@
 import io
 import logging
 
-from .. import util
+from .. import util, formats
 from . import decode, keyring, protocol
 
 log = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.7
         protocol.subpacket_byte(0x0B, 9),  # preferred symmetric algo (AES-256)
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.4
-        protocol.subpacket_byte(0x1B, 1 | 2),  # key flags (certify & sign)
+        protocol.subpacket_byte(0x1B, 1),  # key flags (certify)
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.21
         protocol.subpacket_bytes(0x15, [8, 9, 10]),  # preferred hash
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.8
@@ -57,9 +57,11 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
 
     data_to_sign = primary['_to_hash'] + subkey.data_to_hash()
 
-    if subkey.ecdh:
-        embedded_sig = None
-    else:
+    # Key flags: https://tools.ietf.org/html/rfc4880#section-5.2.3.21
+    if subkey.keyflag == formats.KeyFlags.CERTIFY or \
+       subkey.keyflag == formats.KeyFlags.SIGN    or \
+       subkey.keyflag == formats.KeyFlags.AUTHENTICATE:
+
         # Primary Key Binding Signature
         hashed_subpackets = [
             protocol.subpacket_time(subkey.created)]  # signature time
@@ -73,12 +75,17 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
             hashed_subpackets=hashed_subpackets,
             unhashed_subpackets=unhashed_subpackets)
 
+        if subkey.keyflag == formats.KeyFlags.CERTIFY:
+            flags = 1
+        elif subkey.keyflag == formats.KeyFlags.SIGN:
+            flags = 2
+        elif subkey.keyflag == formats.KeyFlags.AUTHENTICATE:
+            flags = 32 # 0x20
+    elif subkey.keyflag == formats.KeyFlags.ENCRYPT:
+        embedded_sig = None
+        flags = (4 | 8)
+
     # Subkey Binding Signature
-
-    # Key flags: https://tools.ietf.org/html/rfc4880#section-5.2.3.21
-    # (certify & sign)                   (encrypt)
-    flags = (2) if (not subkey.ecdh) else (4 | 8)
-
     hashed_subpackets = [
         protocol.subpacket_time(subkey.created),  # signature time
         protocol.subpacket_byte(0x1B, flags)]
@@ -100,4 +107,4 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
         hashed_subpackets=hashed_subpackets,
         unhashed_subpackets=unhashed_subpackets)
     sign_packet = protocol.packet(tag=2, blob=signature)
-    return primary_bytes + subkey_packet + sign_packet
+    return subkey_packet + sign_packet

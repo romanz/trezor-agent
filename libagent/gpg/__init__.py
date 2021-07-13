@@ -36,49 +36,80 @@ def export_public_key(device_type, args):
     c = client.Client(device=device_type())
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
-    verifying_key = c.pubkey(identity=identity, ecdh=False)
-    decryption_key = c.pubkey(identity=identity, ecdh=True)
+
+    certifying_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.CERTIFY)
+    signing_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.SIGN)
+    authentication_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.AUTHENTICATE)
+    encryption_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.ENCRYPT)
+
     signer_func = functools.partial(c.sign, identity=identity)
 
     if args.subkey:  # add as subkey
         log.info('adding %s GPG subkey for "%s" to existing key',
                  args.ecdsa_curve, args.user_id)
         # subkey for signing
-        signing_key = protocol.PublicKey(
+        signing_subkey = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=verifying_key, ecdh=False)
+            verifying_key=signing_pub_key, keyflag=formats.KeyFlags.SIGN)
+        # subkey for authentication
+        authentication_subkey = protocol.PublicKey(
+            curve_name=args.ecdsa_curve, created=args.time,
+            verifying_key=authentication_pub_key, keyflag=formats.KeyFlags.AUTHENTICATE)
         # subkey for encryption
-        encryption_key = protocol.PublicKey(
+        encryption_subkey = protocol.PublicKey(
             curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-            created=args.time, verifying_key=decryption_key, ecdh=True)
+            created=args.time, verifying_key=encryption_pub_key, keyflag=formats.KeyFlags.ENCRYPT)
+
         primary_bytes = keyring.export_public_key(args.user_id)
-        result = encode.create_subkey(primary_bytes=primary_bytes,
-                                      subkey=signing_key,
+
+        signing_result = encode.create_subkey(primary_bytes=primary_bytes,
+                                      subkey=signing_subkey,
                                       signer_func=signer_func)
-        result = encode.create_subkey(primary_bytes=result,
-                                      subkey=encryption_key,
+        authentication_result = encode.create_subkey(primary_bytes=primary_bytes,
+                                      subkey=authentication_subkey,
                                       signer_func=signer_func)
+        encryption_result = encode.create_subkey(primary_bytes=primary_bytes,
+                                      subkey=encryption_subkey,
+                                      signer_func=signer_func)
+
+        result = primary_bytes + signing_result + authentication_result + encryption_result
+
     else:  # add as primary
         log.info('creating new %s GPG primary key for "%s"',
                  args.ecdsa_curve, args.user_id)
-        # primary key for signing
+        # primary key for certification
         primary = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=verifying_key, ecdh=False)
+            verifying_key=certifying_pub_key, keyflag=formats.KeyFlags.CERTIFY)
+        # subkey key for signing
+        signing_subkey = protocol.PublicKey(
+            curve_name=args.ecdsa_curve, created=args.time,
+            verifying_key=signing_pub_key, keyflag=formats.KeyFlags.SIGN)
+        # subkey key for authentication
+        authentication_subkey = protocol.PublicKey(
+            curve_name=args.ecdsa_curve, created=args.time,
+            verifying_key=authentication_pub_key, keyflag=formats.KeyFlags.AUTHENTICATE)
         # subkey for encryption
-        subkey = protocol.PublicKey(
+        encryption_subkey = protocol.PublicKey(
             curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-            created=args.time, verifying_key=decryption_key, ecdh=True)
+            created=args.time, verifying_key=encryption_pub_key, keyflag=formats.KeyFlags.ENCRYPT)
 
-        result = encode.create_primary(user_id=args.user_id,
+        primary_result = encode.create_primary(user_id=args.user_id,
                                        pubkey=primary,
                                        signer_func=signer_func)
-        result = encode.create_subkey(primary_bytes=result,
-                                      subkey=subkey,
+
+        signing_result = encode.create_subkey(primary_bytes=primary_result,
+                                      subkey=signing_subkey,
+                                      signer_func=signer_func)
+        authentication_result = encode.create_subkey(primary_bytes=primary_result,
+                                      subkey=authentication_subkey,
+                                      signer_func=signer_func)
+        encryption_result = encode.create_subkey(primary_bytes=primary_result,
+                                      subkey=encryption_subkey,
                                       signer_func=signer_func)
 
+        result = primary_result + signing_result + authentication_result + encryption_result
     return protocol.armor(result, 'PUBLIC KEY BLOCK')
-
 
 def verify_gpg_version():
     """Make sure that the installed GnuPG is not too old."""

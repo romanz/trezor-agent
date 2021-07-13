@@ -7,6 +7,8 @@ import logging
 import ecdsa
 import nacl.signing
 
+from enum import Enum
+
 from . import util
 
 log = logging.getLogger(__name__)
@@ -32,6 +34,11 @@ SUPPORTED_KEY_TYPES = {SSH_NIST256_KEY_TYPE, SSH_NIST256_CERT_TYPE, SSH_ED25519_
 
 hashfunc = hashlib.sha256
 
+class KeyFlags(Enum):
+    CERTIFY      = 0
+    SIGN         = 1
+    AUTHENTICATE = 2
+    ENCRYPT      = 3
 
 def fingerprint(blob):
     """

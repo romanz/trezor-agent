@@ -81,27 +81,41 @@ class Identity:
         """Return identity serialized to string."""
         return '<{}|{}>'.format(identity_to_string(self.identity_dict), self.curve_name)
 
-    def get_bip32_address(self, ecdh=False):
+    def get_bip32_address(self, keyflag=formats.KeyFlags.CERTIFY):
         """Compute BIP32 derivation address according to SLIP-0013/0017."""
-        index = struct.pack('<L', self.identity_dict.get('index', 0))
+        if keyflag == formats.KeyFlags.CERTIFY or \
+           keyflag == formats.KeyFlags.SIGN    or \
+           keyflag == formats.KeyFlags.AUTHENTICATE:
+            i = keyflag.value
+        elif keyflag == formats.KeyFlags.ENCRYPT:
+            i = 0
+
+        index = struct.pack('<L', self.identity_dict.get('index', i))
         addr = index + self.to_bytes()
         log.debug('bip32 address string: %r', addr)
         digest = hashlib.sha256(addr).digest()
         s = io.BytesIO(bytearray(digest))
 
-        hardened = 0x80000000
-        addr_0 = 17 if bool(ecdh) else 13
+        if keyflag == formats.KeyFlags.CERTIFY or \
+           keyflag == formats.KeyFlags.SIGN    or \
+           keyflag == formats.KeyFlags.AUTHENTICATE:
+            addr_0 = 13
+        elif keyflag == formats.KeyFlags.ENCRYPT:
+            addr_0 = 17
+
         address_n = [addr_0] + list(util.recv(s, '<LLLL'))
+        hardened = 0x80000000
         return [(hardened | value) for value in address_n]
 
-    def get_curve_name(self, ecdh=False):
+    def get_curve_name(self, keyflag=formats.KeyFlags.CERTIFY):
         """Return correct curve name for device operations."""
-        if ecdh:
-            return formats.get_ecdh_curve_name(self.curve_name)
-        else:
+        if keyflag == formats.KeyFlags.CERTIFY or \
+           keyflag == formats.KeyFlags.SIGN    or \
+           keyflag == formats.KeyFlags.AUTHENTICATE:
             return self.curve_name
-
-
+        elif keyflag == formats.KeyFlags.ENCRYPT:
+            return formats.get_ecdh_curve_name(self.curve_name)
+        
 class Device:
     """Abstract cryptographic hardware device interface."""
 
@@ -134,7 +148,7 @@ class Device:
             log.exception('close failed: %s', e)
         self.conn = None
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity, keyflag=formats.KeyFlags.CERTIFY):
         """Get public key (as bytes)."""
         raise NotImplementedError()
 
