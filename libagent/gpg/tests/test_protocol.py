@@ -3,6 +3,7 @@ import nacl.signing
 import pytest
 
 from ... import formats
+from ...formats import KeyFlags
 from .. import protocol
 
 
@@ -64,20 +65,20 @@ def test_make_signature():
                    b'\x00\x00\x00\x01\x00\x00\xd0\xe5\x00\x03\x07\x00\x04\x08')
 
 
-def test_nist256p1():
+def test_nist256p1_signing():
     sk = ecdsa.SigningKey.from_secret_exponent(secexp=1, curve=ecdsa.NIST256p)
     vk = sk.get_verifying_key()
     pk = protocol.PublicKey(curve_name=formats.CURVE_NIST256,
-                            created=42, verifying_key=vk)
+                            created=42, verifying_key=vk, keyflag=KeyFlags.SIGN)
     assert repr(pk) == 'GPG public key nist256p1/F82361D9'
     assert pk.keygrip() == b'\x95\x85.\x91\x7f\xe2\xc3\x91R\xba\x99\x81\x92\xb5y\x1d\xb1\\\xdc\xf0'
 
 
-def test_nist256p1_ecdh():
+def test_nist256p1_encryption():
     sk = ecdsa.SigningKey.from_secret_exponent(secexp=1, curve=ecdsa.NIST256p)
     vk = sk.get_verifying_key()
     pk = protocol.PublicKey(curve_name=formats.CURVE_NIST256,
-                            created=42, verifying_key=vk, ecdh=True)
+                            created=42, verifying_key=vk, keyflag=KeyFlags.ENCRYPT)
     assert repr(pk) == 'GPG public key nist256p1/5811DF46'
     assert pk.keygrip() == b'\x95\x85.\x91\x7f\xe2\xc3\x91R\xba\x99\x81\x92\xb5y\x1d\xb1\\\xdc\xf0'
 
