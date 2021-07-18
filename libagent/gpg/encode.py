@@ -2,8 +2,9 @@
 import io
 import logging
 
-from .. import util, formats
+from .. import util
 from . import decode, keyring, protocol
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -58,9 +59,9 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
     data_to_sign = primary['_to_hash'] + subkey.data_to_hash()
 
     # Key flags: https://tools.ietf.org/html/rfc4880#section-5.2.3.21
-    if subkey.keyflag == formats.KeyFlags.CERTIFY or \
-       subkey.keyflag == formats.KeyFlags.SIGN    or \
-       subkey.keyflag == formats.KeyFlags.AUTHENTICATE:
+    if subkey.keyflag == KeyFlags.CERTIFY or \
+       subkey.keyflag == KeyFlags.SIGN    or \
+       subkey.keyflag == KeyFlags.AUTHENTICATE:
 
         # Primary Key Binding Signature
         hashed_subpackets = [
@@ -75,13 +76,13 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
             hashed_subpackets=hashed_subpackets,
             unhashed_subpackets=unhashed_subpackets)
 
-        if subkey.keyflag == formats.KeyFlags.CERTIFY:
+        if subkey.keyflag == KeyFlags.CERTIFY:
             flags = 1
-        elif subkey.keyflag == formats.KeyFlags.SIGN:
+        elif subkey.keyflag == KeyFlags.SIGN:
             flags = 2
-        elif subkey.keyflag == formats.KeyFlags.AUTHENTICATE:
+        elif subkey.keyflag == KeyFlags.AUTHENTICATE:
             flags = 32 # 0x20
-    elif subkey.keyflag == formats.KeyFlags.ENCRYPT:
+    elif subkey.keyflag == KeyFlags.ENCRYPT:
         embedded_sig = None
         flags = (4 | 8)
 

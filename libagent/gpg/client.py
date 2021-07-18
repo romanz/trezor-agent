@@ -3,6 +3,7 @@
 import logging
 
 from .. import formats, util
+from ..formats import KeyFlags
 from ..device import interface
 
 log = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class Client:
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, keyflag=formats.KeyFlags.CERTIFY):
+    def pubkey(self, identity, keyflag=KeyFlags.CERTIFY):
         """Return public key as VerifyingKey object."""
         with self.device:
             return self.device.pubkey(keyflag=keyflag, identity=identity)

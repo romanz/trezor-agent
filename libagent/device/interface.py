@@ -9,6 +9,7 @@ import struct
 import unidecode
 
 from .. import formats, util
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -81,13 +82,13 @@ class Identity:
         """Return identity serialized to string."""
         return '<{}|{}>'.format(identity_to_string(self.identity_dict), self.curve_name)
 
-    def get_bip32_address(self, keyflag=formats.KeyFlags.CERTIFY):
+    def get_bip32_address(self, keyflag=KeyFlags.CERTIFY):
         """Compute BIP32 derivation address according to SLIP-0013/0017."""
-        if keyflag == formats.KeyFlags.CERTIFY or \
-           keyflag == formats.KeyFlags.SIGN    or \
-           keyflag == formats.KeyFlags.AUTHENTICATE:
+        if keyflag == KeyFlags.CERTIFY or \
+           keyflag == KeyFlags.SIGN    or \
+           keyflag == KeyFlags.AUTHENTICATE:
             i = keyflag.value
-        elif keyflag == formats.KeyFlags.ENCRYPT:
+        elif keyflag == KeyFlags.ENCRYPT:
             i = 0
 
         index = struct.pack('<L', self.identity_dict.get('index', i))
@@ -96,24 +97,24 @@ class Identity:
         digest = hashlib.sha256(addr).digest()
         s = io.BytesIO(bytearray(digest))
 
-        if keyflag == formats.KeyFlags.CERTIFY or \
-           keyflag == formats.KeyFlags.SIGN    or \
-           keyflag == formats.KeyFlags.AUTHENTICATE:
+        if keyflag == KeyFlags.CERTIFY or \
+           keyflag == KeyFlags.SIGN    or \
+           keyflag == KeyFlags.AUTHENTICATE:
             addr_0 = 13
-        elif keyflag == formats.KeyFlags.ENCRYPT:
+        elif keyflag == KeyFlags.ENCRYPT:
             addr_0 = 17
 
         address_n = [addr_0] + list(util.recv(s, '<LLLL'))
         hardened = 0x80000000
         return [(hardened | value) for value in address_n]
 
-    def get_curve_name(self, keyflag=formats.KeyFlags.CERTIFY):
+    def get_curve_name(self, keyflag=KeyFlags.CERTIFY):
         """Return correct curve name for device operations."""
-        if keyflag == formats.KeyFlags.CERTIFY or \
-           keyflag == formats.KeyFlags.SIGN    or \
-           keyflag == formats.KeyFlags.AUTHENTICATE:
+        if keyflag == KeyFlags.CERTIFY or \
+           keyflag == KeyFlags.SIGN    or \
+           keyflag == KeyFlags.AUTHENTICATE:
             return self.curve_name
-        elif keyflag == formats.KeyFlags.ENCRYPT:
+        elif keyflag == KeyFlags.ENCRYPT:
             return formats.get_ecdh_curve_name(self.curve_name)
         
 class Device:
@@ -148,7 +149,7 @@ class Device:
             log.exception('close failed: %s', e)
         self.conn = None
 
-    def pubkey(self, identity, keyflag=formats.KeyFlags.CERTIFY):
+    def pubkey(self, identity, keyflag=KeyFlags.CERTIFY):
         """Get public key (as bytes)."""
         raise NotImplementedError()
 

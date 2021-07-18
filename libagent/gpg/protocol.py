@@ -8,6 +8,7 @@ import struct
 import nacl.signing
 
 from .. import formats, util
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ def get_curve_name_by_oid(oid):
 class PublicKey:
     """GPG representation for public key packets."""
 
-    def __init__(self, curve_name, created, verifying_key, keyflag=formats.KeyFlags.CERTIFY):
+    def __init__(self, curve_name, created, verifying_key, keyflag=KeyFlags.CERTIFY):
         """Contruct using a ECDSA VerifyingKey object."""
         self.curve_name = curve_name
         self.curve_info = SUPPORTED_CURVES[curve_name]
@@ -198,14 +199,14 @@ class PublicKey:
         self.verifying_key = verifying_key
         self.keyflag = keyflag
 
-        if keyflag == formats.KeyFlags.CERTIFY or \
-           keyflag == formats.KeyFlags.SIGN    or \
-           keyflag == formats.KeyFlags.AUTHENTICATE:
+        if keyflag == KeyFlags.CERTIFY or \
+           keyflag == KeyFlags.SIGN    or \
+           keyflag == KeyFlags.AUTHENTICATE:
         
             self.algo_id = self.curve_info['algo_id']
             self.ecdh_packet = b''
 
-        elif keyflag == formats.KeyFlags.ENCRYPT:
+        elif keyflag == KeyFlags.ENCRYPT:
 
             self.algo_id = ECDH_ALGO_ID
             self.ecdh_packet = b'\x03\x01\x08\x07'

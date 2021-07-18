@@ -24,6 +24,7 @@ import semver
 
 from .. import device, formats, server, util
 from . import agent, client, encode, keyring, protocol
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -37,10 +38,10 @@ def export_public_key(device_type, args):
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
 
-    certifying_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.CERTIFY)
-    signing_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.SIGN)
-    authentication_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.AUTHENTICATE)
-    encryption_pub_key = c.pubkey(identity=identity, keyflag=formats.KeyFlags.ENCRYPT)
+    certifying_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.CERTIFY)
+    signing_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.SIGN)
+    authentication_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.AUTHENTICATE)
+    encryption_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.ENCRYPT)
 
     signer_func = functools.partial(c.sign, identity=identity)
 
@@ -50,15 +51,15 @@ def export_public_key(device_type, args):
         # subkey for signing
         signing_subkey = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=signing_pub_key, keyflag=formats.KeyFlags.SIGN)
+            verifying_key=signing_pub_key, keyflag=KeyFlags.SIGN)
         # subkey for authentication
         authentication_subkey = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=authentication_pub_key, keyflag=formats.KeyFlags.AUTHENTICATE)
+            verifying_key=authentication_pub_key, keyflag=KeyFlags.AUTHENTICATE)
         # subkey for encryption
         encryption_subkey = protocol.PublicKey(
             curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-            created=args.time, verifying_key=encryption_pub_key, keyflag=formats.KeyFlags.ENCRYPT)
+            created=args.time, verifying_key=encryption_pub_key, keyflag=KeyFlags.ENCRYPT)
 
         primary_bytes = keyring.export_public_key(args.user_id)
 
@@ -80,19 +81,19 @@ def export_public_key(device_type, args):
         # primary key for certification
         primary = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=certifying_pub_key, keyflag=formats.KeyFlags.CERTIFY)
+            verifying_key=certifying_pub_key, keyflag=KeyFlags.CERTIFY)
         # subkey key for signing
         signing_subkey = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=signing_pub_key, keyflag=formats.KeyFlags.SIGN)
+            verifying_key=signing_pub_key, keyflag=KeyFlags.SIGN)
         # subkey key for authentication
         authentication_subkey = protocol.PublicKey(
             curve_name=args.ecdsa_curve, created=args.time,
-            verifying_key=authentication_pub_key, keyflag=formats.KeyFlags.AUTHENTICATE)
+            verifying_key=authentication_pub_key, keyflag=KeyFlags.AUTHENTICATE)
         # subkey for encryption
         encryption_subkey = protocol.PublicKey(
             curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-            created=args.time, verifying_key=encryption_pub_key, keyflag=formats.KeyFlags.ENCRYPT)
+            created=args.time, verifying_key=encryption_pub_key, keyflag=KeyFlags.ENCRYPT)
 
         primary_result = encode.create_primary(user_id=args.user_id,
                                        pubkey=primary,

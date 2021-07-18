@@ -6,6 +6,7 @@ import logging
 import semver
 
 from .. import formats
+from ..formats import KeyFlags
 from . import interface
 
 log = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class Trezor(interface.Device):
         self.__class__.cached_session_id = self.conn.session_id
         super().close()
 
-    def pubkey(self, identity, keyflag=formats.KeyFlags.CERTIFY):
+    def pubkey(self, identity, keyflag=KeyFlags.CERTIFY):
         """Return public key."""
         curve_name = identity.get_curve_name(keyflag=keyflag)
         log.debug('"%s" getting public key (%s) from %s',
@@ -105,7 +106,7 @@ class Trezor(interface.Device):
 
     def sign_with_pubkey(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
-        curve_name = identity.get_curve_name(keyflag=formats.KeyFlags.CERTIFY)
+        curve_name = identity.get_curve_name(keyflag=KeyFlags.CERTIFY)
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
         try:
