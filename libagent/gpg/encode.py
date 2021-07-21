@@ -49,7 +49,7 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
     return pubkey_packet + user_id_packet + sign_packet
 
 
-def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
+def create_subkey(primary_bytes, subkey, signer_func, cross_signer_func=None, secret_bytes=b''):
     """Export new subkey to GPG primary key."""
     subkey_packet = protocol.packet(tag=(7 if secret_bytes else 14),
                                     blob=subkey.data() + secret_bytes)
@@ -58,38 +58,34 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
 
     data_to_sign = primary['_to_hash'] + subkey.data_to_hash()
 
-    # Key flags: https://tools.ietf.org/html/rfc4880#section-5.2.3.21
     if subkey.keyflag == KeyFlags.CERTIFY or \
        subkey.keyflag == KeyFlags.SIGN    or \
        subkey.keyflag == KeyFlags.AUTHENTICATE:
 
         # Primary Key Binding Signature
         hashed_subpackets = [
-            protocol.subpacket_time(subkey.created)]  # signature time
+            protocol.subpacket_time(subkey.created + 1), # signature time
+            protocol.subpacket_bytes(33, b'\x04' + subkey.fingerprint())
+        ]
         unhashed_subpackets = [
             protocol.subpacket(16, subkey.key_id())]  # issuer key id
         embedded_sig = protocol.make_signature(
-            signer_func=signer_func,
+            signer_func=cross_signer_func,
             data_to_sign=data_to_sign,
             public_algo=subkey.algo_id,
             sig_type=0x19,
             hashed_subpackets=hashed_subpackets,
             unhashed_subpackets=unhashed_subpackets)
 
-        if subkey.keyflag == KeyFlags.CERTIFY:
-            flags = 1
-        elif subkey.keyflag == KeyFlags.SIGN:
-            flags = 2
-        elif subkey.keyflag == KeyFlags.AUTHENTICATE:
-            flags = 32 # 0x20
     elif subkey.keyflag == KeyFlags.ENCRYPT:
         embedded_sig = None
-        flags = (4 | 8)
 
     # Subkey Binding Signature
     hashed_subpackets = [
         protocol.subpacket_time(subkey.created),  # signature time
-        protocol.subpacket_byte(0x1B, flags)]
+        protocol.subpacket_byte(0x1B, subkey.keyflag),
+        protocol.subpacket_bytes(33, b'\x04' + primary['fingerprint'])
+    ]
 
     unhashed_subpackets = []
     unhashed_subpackets.append(protocol.subpacket(16, primary['key_id']))

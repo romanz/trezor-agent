@@ -9,7 +9,7 @@ import struct
 import unidecode
 
 from .. import formats, util
-from ..formats import KeyFlags
+from ..formats import KeyFlags, keyflag_to_index
 
 log = logging.getLogger(__name__)
 
@@ -63,14 +63,16 @@ class DeviceError(Error):
 class Identity:
     """Represent SLIP-0013 identity, together with a elliptic curve choice."""
 
-    def __init__(self, identity_str, curve_name):
+    def __init__(self, identity_str, curve_name, keyflag):
         """Configure for specific identity and elliptic curve usage."""
         self.identity_dict = string_to_identity(identity_str)
+        self.identity_dict['index'] = keyflag_to_index(keyflag)
         self.curve_name = curve_name
+        self.keyflag = keyflag
 
     def items(self):
         """Return a copy of identity_dict items."""
-        return [(k, unidecode.unidecode(v))
+        return [(k, v if isinstance(v, int) else unidecode.unidecode(v))
                 for k, v in self.identity_dict.items()]
 
     def to_bytes(self):
@@ -80,43 +82,40 @@ class Identity:
 
     def to_string(self):
         """Return identity serialized to string."""
-        return '<{}|{}>'.format(identity_to_string(self.identity_dict), self.curve_name)
+        return u'<{}|{}|{}>'.format(self.identity_dict['index'],
+                                    identity_to_string(self.identity_dict),
+                                    self.curve_name)
 
-    def get_bip32_address(self, keyflag=KeyFlags.CERTIFY):
+    def get_bip32_address(self):
         """Compute BIP32 derivation address according to SLIP-0013/0017."""
-        if keyflag == KeyFlags.CERTIFY or \
-           keyflag == KeyFlags.SIGN    or \
-           keyflag == KeyFlags.AUTHENTICATE:
-            i = keyflag.value
-        elif keyflag == KeyFlags.ENCRYPT:
-            i = 0
 
-        index = struct.pack('<L', self.identity_dict.get('index', i))
+        # i = keyflag_to_index(keyflag)
+        index = struct.pack('<L', self.identity_dict['index'])
         addr = index + self.to_bytes()
         log.debug('bip32 address string: %r', addr)
         digest = hashlib.sha256(addr).digest()
         s = io.BytesIO(bytearray(digest))
 
-        if keyflag == KeyFlags.CERTIFY or \
-           keyflag == KeyFlags.SIGN    or \
-           keyflag == KeyFlags.AUTHENTICATE:
+        if self.keyflag == KeyFlags.CERTIFY or \
+           self.keyflag == KeyFlags.SIGN    or \
+           self.keyflag == KeyFlags.AUTHENTICATE:
             addr_0 = 13
-        elif keyflag == KeyFlags.ENCRYPT:
+        elif self.keyflag == KeyFlags.ENCRYPT:
             addr_0 = 17
 
         address_n = [addr_0] + list(util.recv(s, '<LLLL'))
         hardened = 0x80000000
         return [(hardened | value) for value in address_n]
 
-    def get_curve_name(self, keyflag=KeyFlags.CERTIFY):
+    def get_curve_name(self):
         """Return correct curve name for device operations."""
-        if keyflag == KeyFlags.CERTIFY or \
-           keyflag == KeyFlags.SIGN    or \
-           keyflag == KeyFlags.AUTHENTICATE:
+        if self.keyflag == KeyFlags.CERTIFY or \
+           self.keyflag == KeyFlags.SIGN    or \
+           self.keyflag == KeyFlags.AUTHENTICATE:
             return self.curve_name
-        elif keyflag == KeyFlags.ENCRYPT:
+        elif self.keyflag == KeyFlags.ENCRYPT:
             return formats.get_ecdh_curve_name(self.curve_name)
-        
+
 class Device:
     """Abstract cryptographic hardware device interface."""
 
@@ -149,7 +148,7 @@ class Device:
             log.exception('close failed: %s', e)
         self.conn = None
 
-    def pubkey(self, identity, keyflag=KeyFlags.CERTIFY):
+    def pubkey(self, identity):
         """Get public key (as bytes)."""
         raise NotImplementedError()
 

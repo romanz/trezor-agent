@@ -202,7 +202,7 @@ class PublicKey:
         if keyflag == KeyFlags.CERTIFY or \
            keyflag == KeyFlags.SIGN    or \
            keyflag == KeyFlags.AUTHENTICATE:
-        
+
             self.algo_id = self.curve_info['algo_id']
             self.ecdh_packet = b''
 
@@ -229,12 +229,12 @@ class PublicKey:
         """Data for digest computation."""
         return b'\x99' + util.prefix_len('>H', self.data())
 
-    def _fingerprint(self):
+    def fingerprint(self):
         return hashlib.sha1(self.data_to_hash()).digest()
 
     def key_id(self):
         """Short (8 byte) GPG key ID."""
-        return self._fingerprint()[-8:]
+        return self.fingerprint()[-8:]
 
     def __repr__(self):
         """Short (8 hexadecimal digits) GPG key ID."""

@@ -1,3 +1,4 @@
+from ...formats import KeyFlags
 import mock
 import pytest
 
@@ -25,7 +26,7 @@ def fake_connection(keys, signer):
 
 def test_list():
     key = formats.import_public_key(NIST256_KEY)
-    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1')
+    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1', KeyFlags.CERTIFY)
     h = protocol.Handler(fake_connection(keys=[key], signer=None))
     reply = h.handle(LIST_MSG)
     assert reply == LIST_NIST256_REPLY
@@ -45,14 +46,14 @@ def test_unsupported():
 
 
 def ecdsa_signer(identity, blob):
-    assert identity.to_string() == '<ssh://localhost|nist256p1>'
+    assert identity.to_string() == '<0|ssh://localhost|nist256p1>'
     assert blob == NIST256_BLOB
     return NIST256_SIG
 
 
 def test_ecdsa_sign():
     key = formats.import_public_key(NIST256_KEY)
-    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1')
+    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1', KeyFlags.CERTIFY)
     h = protocol.Handler(fake_connection(keys=[key], signer=ecdsa_signer))
     reply = h.handle(NIST256_SIGN_MSG)
     assert reply == NIST256_SIGN_REPLY
@@ -66,12 +67,12 @@ def test_sign_missing():
 
 def test_sign_wrong():
     def wrong_signature(identity, blob):
-        assert identity.to_string() == '<ssh://localhost|nist256p1>'
+        assert identity.to_string() == '<0|ssh://localhost|nist256p1>'
         assert blob == NIST256_BLOB
         return b'\x00' * 64
 
     key = formats.import_public_key(NIST256_KEY)
-    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1')
+    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1', KeyFlags.CERTIFY)
     h = protocol.Handler(fake_connection(keys=[key], signer=wrong_signature))
     with pytest.raises(ValueError):
         h.handle(NIST256_SIGN_MSG)
@@ -82,7 +83,7 @@ def test_sign_cancel():
         raise IOError()
 
     key = formats.import_public_key(NIST256_KEY)
-    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1')
+    key['identity'] = device.interface.Identity('ssh://localhost', 'nist256p1', KeyFlags.CERTIFY)
     h = protocol.Handler(fake_connection(keys=[key], signer=cancel_signature))
     assert h.handle(NIST256_SIGN_MSG) == protocol.failure()
 
@@ -96,14 +97,14 @@ ED25519_SIG = b'''\x8eb)\xa6\xe9P\x83VE\xfbq\xc6\xbf\x1dV3\xe3<O\x11\xc0\xfa\xe4
 
 
 def ed25519_signer(identity, blob):
-    assert identity.to_string() == '<ssh://localhost|ed25519>'
+    assert identity.to_string() == '<0|ssh://localhost|ed25519>'
     assert blob == ED25519_BLOB
     return ED25519_SIG
 
 
 def test_ed25519_sign():
     key = formats.import_public_key(ED25519_KEY)
-    key['identity'] = device.interface.Identity('ssh://localhost', 'ed25519')
+    key['identity'] = device.interface.Identity('ssh://localhost', 'ed25519', KeyFlags.CERTIFY)
     h = protocol.Handler(fake_connection(keys=[key], signer=ed25519_signer))
     reply = h.handle(ED25519_SIGN_MSG)
     assert reply == ED25519_SIGN_REPLY

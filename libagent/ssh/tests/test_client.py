@@ -1,4 +1,5 @@
 import io
+from ...formats import KeyFlags
 
 import mock
 import pytest
@@ -12,7 +13,7 @@ PUBKEY = (b'\x03\xd8(\xb5\xa6`\xbet0\x95\xac:[;]\xdc,\xbd\xdc?\xd7\xc0\xec'
           b'\xdd\xbc+\xfar~\x9dAis')
 PUBKEY_TEXT = ('ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzd'
                'HAyNTYAAABBBNgotaZgvnQwlaw6Wztd3Cy93D/XwOzdvCv6cn6dQWlzNMEQeW'
-               'VUfhvrGljR2Z/CMRONY6ejB+9PnpUOPuzYqi8= <localhost:22|nist256p1>\n')
+               'VUfhvrGljR2Z/CMRONY6ejB+9PnpUOPuzYqi8= <0|localhost:22|nist256p1>\n')
 
 
 class MockDevice(device.interface.Device):  # pylint: disable=abstract-method
@@ -24,7 +25,7 @@ class MockDevice(device.interface.Device):  # pylint: disable=abstract-method
     def connect(self):
         return mock.Mock()
 
-    def pubkey(self, identity, ecdh=False):  # pylint: disable=unused-argument
+    def pubkey(self, identity):  # pylint: disable=unused-argument
         assert self.conn
         return formats.decompress_pubkey(pubkey=PUBKEY, curve_name=identity.curve_name)
 
@@ -51,7 +52,7 @@ SIG = (b'R\x19T\xf2\x84$\xef#\x0e\xee\x04X\xc6\xc3\x99T`\xd1\xd8\xf7!'
 
 def test_ssh_agent():
     identity = device.interface.Identity(identity_str='localhost:22',
-                                         curve_name=CURVE)
+                                         curve_name=CURVE, keyflag=KeyFlags.CERTIFY)
     c = client.Client(device=MockDevice())
     assert c.export_public_keys([identity]) == [PUBKEY_TEXT]
     signature = c.sign_ssh_challenge(blob=BLOB, identity=identity)

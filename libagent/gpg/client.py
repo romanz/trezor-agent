@@ -9,9 +9,9 @@ from ..device import interface
 log = logging.getLogger(__name__)
 
 
-def create_identity(user_id, curve_name):
+def create_identity(user_id, curve_name, keyflag):
     """Create GPG identity for hardware device."""
-    result = interface.Identity(identity_str='gpg://', curve_name=curve_name)
+    result = interface.Identity(identity_str='gpg://', curve_name=curve_name, keyflag=keyflag)
     result.identity_dict['host'] = user_id
     return result
 
@@ -23,10 +23,10 @@ class Client:
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, keyflag=KeyFlags.CERTIFY):
+    def pubkey(self, identity):
         """Return public key as VerifyingKey object."""
         with self.device:
-            return self.device.pubkey(keyflag=keyflag, identity=identity)
+            return self.device.pubkey(identity=identity)
 
     def sign(self, identity, digest):
         """Sign the digest and return a serialized signature."""

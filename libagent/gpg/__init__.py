@@ -24,7 +24,7 @@ import semver
 
 from .. import device, formats, server, util
 from . import agent, client, encode, keyring, protocol
-from ..formats import KeyFlags
+from ..formats import KeyFlags, keyflag_to_index
 
 log = logging.getLogger(__name__)
 
@@ -35,15 +35,26 @@ def export_public_key(device_type, args):
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
     c = client.Client(device=device_type())
-    identity = client.create_identity(user_id=args.user_id,
-                                      curve_name=args.ecdsa_curve)
 
-    certifying_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.CERTIFY)
-    signing_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.SIGN)
-    authentication_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.AUTHENTICATE)
-    encryption_pub_key = c.pubkey(identity=identity, keyflag=KeyFlags.ENCRYPT)
+    certifying_identity = client.create_identity(user_id=args.user_id,
+        curve_name=args.ecdsa_curve, keyflag=KeyFlags.CERTIFY)
+    certifying_pub_key = c.pubkey(identity=certifying_identity)
 
-    signer_func = functools.partial(c.sign, identity=identity)
+    signing_identity = client.create_identity(user_id=args.user_id,
+        curve_name=args.ecdsa_curve, keyflag=KeyFlags.SIGN)
+    signing_pub_key = c.pubkey(identity=signing_identity)
+
+    authentication_identity = client.create_identity(user_id=args.user_id,
+        curve_name=args.ecdsa_curve, keyflag=KeyFlags.AUTHENTICATE)
+    authentication_pub_key = c.pubkey(identity=authentication_identity)
+
+    encryption_identity = client.create_identity(user_id=args.user_id,
+        curve_name=args.ecdsa_curve, keyflag=KeyFlags.ENCRYPT)
+    encryption_pub_key = c.pubkey(identity=encryption_identity)
+
+    certifying_signer_func = functools.partial(c.sign, identity=certifying_identity)
+    signing_signer_func = functools.partial(c.sign, identity=signing_identity)
+    authentication_signer_func = functools.partial(c.sign, identity=authentication_identity)
 
     if args.subkey:  # add as subkey
         log.info('adding %s GPG subkey for "%s" to existing key',
@@ -65,13 +76,15 @@ def export_public_key(device_type, args):
 
         signing_result = encode.create_subkey(primary_bytes=primary_bytes,
                                       subkey=signing_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func,
+                                      cross_signer_func=signing_signer_func)
         authentication_result = encode.create_subkey(primary_bytes=primary_bytes,
                                       subkey=authentication_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func,
+                                      cross_signer_func=authentication_signer_func)
         encryption_result = encode.create_subkey(primary_bytes=primary_bytes,
                                       subkey=encryption_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func)
 
         result = primary_bytes + signing_result + authentication_result + encryption_result
 
@@ -97,17 +110,19 @@ def export_public_key(device_type, args):
 
         primary_result = encode.create_primary(user_id=args.user_id,
                                        pubkey=primary,
-                                       signer_func=signer_func)
+                                       signer_func=certifying_signer_func)
 
         signing_result = encode.create_subkey(primary_bytes=primary_result,
                                       subkey=signing_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func,
+                                      cross_signer_func=signing_signer_func)
         authentication_result = encode.create_subkey(primary_bytes=primary_result,
                                       subkey=authentication_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func,
+                                      cross_signer_func=authentication_signer_func)
         encryption_result = encode.create_subkey(primary_bytes=primary_result,
                                       subkey=encryption_subkey,
-                                      signer_func=signer_func)
+                                      signer_func=certifying_signer_func)
 
         result = primary_result + signing_result + authentication_result + encryption_result
     return protocol.armor(result, 'PUBLIC KEY BLOCK')

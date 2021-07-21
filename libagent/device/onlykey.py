@@ -12,6 +12,7 @@ import nacl.signing
 import unidecode
 
 from . import interface
+from ..formats import KeyFlags
 
 # import pgpy
 # from pgpy import PGPKey
@@ -79,9 +80,10 @@ class OnlyKey(interface.Device):
         log.info('disconnected from %s', self.device_name)
         self.ok.close()
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity):
         """Return public key."""
-        curve_name = identity.get_curve_name(ecdh=ecdh)
+        curve_name = identity.get_curve_name()
+        ecdh = identity.keyflag == KeyFlags.ENCRYPT
         if identity.identity_dict['proto'] != 'ssh' and hasattr('self', 'skeyslot') is False:
             self.get_sk_dk()
         if identity.identity_dict['proto'] != 'ssh' and self.dkeyslot < 132 and ecdh is True:
@@ -191,7 +193,7 @@ class OnlyKey(interface.Device):
 
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
-        curve_name = identity.get_curve_name(ecdh=False)
+        curve_name = identity.get_curve_name()
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
         if identity.identity_dict['proto'] != 'ssh' and hasattr('self', 'skeyslot') is False:
@@ -293,7 +295,7 @@ class OnlyKey(interface.Device):
 
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
-        curve_name = identity.get_curve_name(ecdh=True)
+        curve_name = identity.get_curve_name()
         log.debug('"%s" shared session key (%s) for %r from %s',
                   identity.to_string(), curve_name, pubkey, self)
         # Calculate hash for key derivation input data
