@@ -5,7 +5,6 @@ import hashlib
 import io
 import logging
 import struct
-import collections
 
 import ecdsa
 import nacl.signing
@@ -310,7 +309,8 @@ def _parse_pubkey_packets(pubkey_bytes):
     stream = io.BytesIO(pubkey_bytes)
     packets_per_pubkey = []
     for p in parse_packets(stream):
-        if p['type'] == 'pubkey':
+        if p['type'] == 'pubkey' or \
+           p['type'] == 'subkey':
             # Add a new packet list for each pubkey.
             packets_per_pubkey.append([])
         packets_per_pubkey[-1].append(p)
@@ -318,43 +318,46 @@ def _parse_pubkey_packets(pubkey_bytes):
 
 
 def load_by_keygrip(pubkey_bytes, keygrip):
-    """Return public key and first user ID for specified keygrip."""
-    for packets in _parse_pubkey_packets(pubkey_bytes):
-        user_ids = [p for p in packets if p['type'] == 'user_id']
-        key_id, kg, keyflag = None, None, None
-        mapping = collections.defaultdict(dict)
+    """Return key, user IDs, and keyflag for specified keygrip."""
+    stream = io.BytesIO(pubkey_bytes)
+    packets = list(parse_packets(stream))
+    packets_per_key = []
+    user_ids = []
+    for p in packets:
+        if p['type'] == 'pubkey' or \
+           p['type'] == 'subkey':
+            # Add a new packet list for each key.
+            packets_per_key.append([])
+        packets_per_key[-1].append(p)
 
-        # Use the key_id to map keyflags from the signature to the keygrip
-        for p in packets:
+    for packets in packets_per_key:
+        user_ids += [p for p in packets if p['type'] == 'user_id']
 
+    for packets in packets_per_key:
+
+        # Each key packet is followed by a signature packet
+        # The key packet contains the keygrip
+        # The signature packet contains the keyflag in the hashed area
+        # Map them together
+        mapping = {}
+        for i in range(0, len(packets)):
+            p = packets[i]
             if p['type'] == 'pubkey' or \
                p['type'] == 'subkey':
-                key_id = p['key_id']
                 kg = p['keygrip']
-                mapping[key_id]['keygrip'] = kg
-
-            if p['type'] == 'signature':
-                keyflag = p.get('keyflag')
-
-                # 0x13: Positive certification of a User ID and Public-Key packet
-                if p['sig_type'] == 19:
-                    key_id = p['key_id']
-
-                # 0x18: Subkey Binding Signature
-                elif p['sig_type'] == 24:
-                    embedded = p.get('embedded')
-                    if embedded:
-                        for e in embedded:
-
-                            # 0x19: Primary Key Binding Signature
-                            if e.get('sig_type') == 25:
-                                key_id = e['key_id']
-
-            mapping[key_id]['keyflag'] = keyflag
+                for j in range(i+1, len(packets)):
+                    sp = packets[j]
+                    if sp['type'] == 'signature':
+                        keyflag = sp['keyflag']
+                        mapping[kg] = keyflag
+                        break
+            else:
+                continue
 
         for p in packets:
             if p.get('keygrip') == keygrip:
-                return p, user_ids, mapping[p.get('key_id')]['keyflag']
+                return p, user_ids, mapping[keygrip]
+
     raise KeyError('{} keygrip not found'.format(util.hexlify(keygrip)))
 
 
