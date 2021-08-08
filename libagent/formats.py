@@ -35,17 +35,19 @@ SUPPORTED_KEY_TYPES = {SSH_NIST256_KEY_TYPE, SSH_NIST256_CERT_TYPE, SSH_ED25519_
 hashfunc = hashlib.sha256
 
 class KeyFlags(IntEnum):
-    CERTIFY      = 1
-    SIGN         = 2
-    AUTHENTICATE = 32 # 0x20
-    ENCRYPT      = 12 # (4|8)
+    CERTIFY          = 1
+    SIGN             = 2
+    ENCRYPT          = 12 # (4|8)
+    AUTHENTICATE     = 32 # 0x20
+    CERTIFY_AND_SIGN = 3  # (1|2)
 
 def keyflag_to_index(keyflag):
     return {
-        KeyFlags.CERTIFY: 0,      # SLIP 13
-        KeyFlags.SIGN: 1,         # SLIP 13
-        KeyFlags.AUTHENTICATE: 2, # SLIP 13
-        KeyFlags.ENCRYPT: 0       # SLIP 17
+        KeyFlags.CERTIFY: 0,         # SLIP 13
+        KeyFlags.SIGN: 1,            # SLIP 13
+        KeyFlags.ENCRYPT: 0,         # SLIP 17
+        KeyFlags.AUTHENTICATE: 2,    # SLIP 13
+        KeyFlags.CERTIFY_AND_SIGN: 0 # SLIP 13
     }[keyflag]
 
 def fingerprint(blob):

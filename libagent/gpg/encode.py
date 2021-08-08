@@ -58,9 +58,7 @@ def create_subkey(primary_bytes, subkey, signer_func, cross_signer_func=None, se
 
     data_to_sign = primary['_to_hash'] + subkey.data_to_hash()
 
-    if subkey.keyflag == KeyFlags.CERTIFY or \
-       subkey.keyflag == KeyFlags.SIGN    or \
-       subkey.keyflag == KeyFlags.AUTHENTICATE:
+    if subkey.keyflag == KeyFlags.SIGN:
 
         # Primary Key Binding Signature
         hashed_subpackets = [
@@ -77,7 +75,7 @@ def create_subkey(primary_bytes, subkey, signer_func, cross_signer_func=None, se
             hashed_subpackets=hashed_subpackets,
             unhashed_subpackets=unhashed_subpackets)
 
-    elif subkey.keyflag == KeyFlags.ENCRYPT:
+    else:
         embedded_sig = None
 
     # Subkey Binding Signature

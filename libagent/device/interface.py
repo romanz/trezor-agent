@@ -96,9 +96,10 @@ class Identity:
         digest = hashlib.sha256(addr).digest()
         s = io.BytesIO(bytearray(digest))
 
-        if self.keyflag == KeyFlags.CERTIFY or \
-           self.keyflag == KeyFlags.SIGN    or \
-           self.keyflag == KeyFlags.AUTHENTICATE:
+        if self.keyflag == KeyFlags.CERTIFY      or \
+           self.keyflag == KeyFlags.SIGN         or \
+           self.keyflag == KeyFlags.AUTHENTICATE or \
+           self.keyflag == KeyFlags.CERTIFY_AND_SIGN:
             addr_0 = 13
         elif self.keyflag == KeyFlags.ENCRYPT:
             addr_0 = 17
@@ -109,9 +110,10 @@ class Identity:
 
     def get_curve_name(self):
         """Return correct curve name for device operations."""
-        if self.keyflag == KeyFlags.CERTIFY or \
-           self.keyflag == KeyFlags.SIGN    or \
-           self.keyflag == KeyFlags.AUTHENTICATE:
+        if self.keyflag == KeyFlags.CERTIFY      or \
+           self.keyflag == KeyFlags.SIGN         or \
+           self.keyflag == KeyFlags.AUTHENTICATE or \
+           self.keyflag == KeyFlags.CERTIFY_AND_SIGN:
             return self.curve_name
         elif self.keyflag == KeyFlags.ENCRYPT:
             return formats.get_ecdh_curve_name(self.curve_name)

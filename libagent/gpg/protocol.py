@@ -199,9 +199,10 @@ class PublicKey:
         self.verifying_key = verifying_key
         self.keyflag = keyflag
 
-        if keyflag == KeyFlags.CERTIFY or \
-           keyflag == KeyFlags.SIGN    or \
-           keyflag == KeyFlags.AUTHENTICATE:
+        if keyflag == KeyFlags.CERTIFY      or \
+           keyflag == KeyFlags.SIGN         or \
+           keyflag == KeyFlags.AUTHENTICATE or \
+           keyflag == KeyFlags.CERTIFY_AND_SIGN:
 
             self.algo_id = self.curve_info['algo_id']
             self.ecdh_packet = b''
