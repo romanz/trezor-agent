@@ -28,12 +28,6 @@ from ..formats import KeyFlags, keyflag_to_index
 
 log = logging.getLogger(__name__)
 
-def prepare_subkey(client_obj, user_id, curve_name, creation_time, keyflag):
-    identity = client.create_identity(user_id=user_id, curve_name=curve_name, keyflag=keyflag)
-    pub_key = client_obj.pubkey(identity)
-    subkey = protocol.PublicKey(curve_name=curve_name, created=creation_time,
-        verifying_key=pub_key, keyflag=keyflag)
-    return subkey
 
 def append_subkeys(client_obj, primary_bytes, user_id, curve_name, creation_time,
                    signing=True, encryption=True, authentication=False):
@@ -44,11 +38,12 @@ def append_subkeys(client_obj, primary_bytes, user_id, curve_name, creation_time
     signer_func = functools.partial(c.sign, identity=certifier)
 
     if signing:
-        crosscert = client.create_identity(user_id=user_id, curve_name=curve_name,
+        identity = client.create_identity(user_id=user_id, curve_name=curve_name,
             keyflag=KeyFlags.SIGN)
-        cross_signer_func = functools.partial(c.sign, identity=crosscert)
-        signing_subkey = prepare_subkey(c, user_id=user_id, curve_name=curve_name,
-            creation_time=creation_time, keyflag=KeyFlags.SIGN)
+        cross_signer_func = functools.partial(c.sign, identity=identity)
+        pub_key = c.pubkey(identity)
+        signing_subkey = protocol.PublicKey(curve_name=curve_name, created=creation_time,
+            verifying_key=pub_key, keyflag=KeyFlags.SIGN)
         signing_bytes = encode.create_subkey(primary_bytes=primary_bytes, subkey=signing_subkey,
             signer_func=signer_func, cross_signer_func=cross_signer_func)
     else:
@@ -56,16 +51,22 @@ def append_subkeys(client_obj, primary_bytes, user_id, curve_name, creation_time
 
     if encryption:
         encryption_curve_name = formats.get_ecdh_curve_name(curve_name)
-        encryption_subkey = prepare_subkey(c, user_id=user_id, curve_name=encryption_curve_name,
-            creation_time=creation_time, keyflag=KeyFlags.ENCRYPT)
+        identity = client.create_identity(user_id=user_id, curve_name=curve_name,
+            keyflag=KeyFlags.ENCRYPT)
+        pub_key = client_obj.pubkey(identity)
+        encryption_subkey = protocol.PublicKey(curve_name=encryption_curve_name,
+            created=creation_time, verifying_key=pub_key, keyflag=KeyFlags.ENCRYPT)
         encryption_bytes = encode.create_subkey(primary_bytes=primary_bytes,
             subkey=encryption_subkey, signer_func=signer_func)
     else:
         encryption_bytes = b''
 
     if authentication:
-        authentication_subkey = prepare_subkey(c, user_id=user_id, curve_name=curve_name,
-            creation_time=creation_time, keyflag=KeyFlags.AUTHENTICATE)
+        identity = client.create_identity(user_id=user_id, curve_name=curve_name,
+            keyflag=KeyFlags.AUTHENTICATE)
+        pub_key = client_obj.pubkey(identity)
+        authentication_subkey = protocol.PublicKey(curve_name=curve_name, created=creation_time,
+            verifying_key=pub_key, keyflag=KeyFlags.AUTHENTICATE)
         authentication_bytes = encode.create_subkey(primary_bytes=primary_bytes,
             subkey=authentication_subkey, signer_func=signer_func)
     else:
