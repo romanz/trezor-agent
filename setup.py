@@ -27,6 +27,7 @@ setup(
         'pymsgbox>=1.0.6',
         'semver>=2.2',
         'unidecode>=0.4.20',
+        'pypiwin32'
     ],
     platforms=['POSIX'],
     classifiers=[

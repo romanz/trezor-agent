@@ -4,24 +4,32 @@ import functools
 import io
 import logging
 import os
+import random
 import re
 import signal
+import string
 import subprocess
 import sys
 import tempfile
 import threading
 
 import configargparse
-import daemon
+try:
+    # TODO: Not supported on Windows. Use daemoniker instead?
+    import daemon
+except ImportError:
+    daemon = None
 import pkg_resources
 
-from .. import device, formats, server, util
+from .. import device, formats, server, util, win_server
 from . import client, protocol
 
 log = logging.getLogger(__name__)
 
 UNIX_SOCKET_TIMEOUT = 0.1
-
+WIN_PIPE_TIMEOUT = 0.1
+DEFAULT_TIMEOUT = WIN_PIPE_TIMEOUT if sys.platform == 'win32' else UNIX_SOCKET_TIMEOUT
+SOCK_TYPE = 'Windows named pipe' if sys.platform == 'win32' else 'UNIX domain socket'
 
 def ssh_args(conn):
     """Create SSH command for connecting specified server."""
@@ -35,7 +43,7 @@ def ssh_args(conn):
     if 'user' in identity:
         args += ['-l', identity['user']]
 
-    args += ['-o', 'IdentityFile={}'.format(pubkey_tempfile.name)]
+    args += ['-o', 'IdentityFile={}'.format(pubkey_tempfile)]
     args += ['-o', 'IdentitiesOnly=true']
     return args + [identity['host']]
 
@@ -83,14 +91,14 @@ def create_agent_parser(device_type):
                    default=formats.CURVE_NIST256,
                    help='specify ECDSA curve name: ' + curve_names)
     p.add_argument('--timeout',
-                   default=UNIX_SOCKET_TIMEOUT, type=float,
+                   default=DEFAULT_TIMEOUT, type=float,
                    help='timeout for accepting SSH client connections')
     p.add_argument('--debug', default=False, action='store_true',
                    help='log SSH protocol messages for debugging.')
     p.add_argument('--log-file', type=str,
                    help='Path to the log file (to be written by the agent).')
     p.add_argument('--sock-path', type=str,
-                   help='Path to the UNIX domain socket of the agent.')
+                   help='Path to the ' + SOCK_TYPE + ' of the agent.')
 
     p.add_argument('--pin-entry-binary', type=str, default='pinentry',
                    help='Path to PIN entry UI helper.')
@@ -100,17 +108,20 @@ def create_agent_parser(device_type):
                    help='Expire passphrase from cache after this duration.')
 
     g = p.add_mutually_exclusive_group()
-    g.add_argument('-d', '--daemonize', default=False, action='store_true',
-                   help='Daemonize the agent and print its UNIX socket path')
+    if daemon:
+        g.add_argument('-d', '--daemonize', default=False, action='store_true',
+                       help='Daemonize the agent and print its ' + SOCK_TYPE)
     g.add_argument('-f', '--foreground', default=False, action='store_true',
-                   help='Run agent in foreground with specified UNIX socket path')
+                   help='Run agent in foreground with specified ' + SOCK_TYPE)
     g.add_argument('-s', '--shell', default=False, action='store_true',
                    help=('run ${SHELL} as subprocess under SSH agent, allowing '
                          'regular SSH-based tools to be used in the shell'))
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
-    g.add_argument('--mosh', default=False, action='store_true',
-                   help='connect to specified host via using Mosh')
+    # Windows doesn't have native mosh
+    if sys.platform != 'win32':
+        g.add_argument('--mosh', default=False, action='store_true',
+                       help='connect to specified host via using Mosh')
 
     p.add_argument('identity', type=_to_unicode, default=None,
                    help='proto://[user@]host[:port][/path]')
@@ -119,18 +130,48 @@ def create_agent_parser(device_type):
     return p
 
 
+def get_ssh_env(sock_path):
+    ssh_version = subprocess.check_output(['ssh', '-V'],
+                                          stderr=subprocess.STDOUT)
+    log.debug('local SSH version: %r', ssh_version)
+    return {'SSH_AUTH_SOCK': sock_path, 'SSH_AGENT_PID': str(os.getpid())}
+
+
+# Windows doesn't support AF_UNIX yet
+# https://bugs.python.org/issue33408
 @contextlib.contextmanager
-def serve(handler, sock_path, timeout=UNIX_SOCKET_TIMEOUT):
+def serve_win(handler, sock_path, timeout=WIN_PIPE_TIMEOUT):
+    """
+    Start the ssh-agent server on a Windows named pipe.
+    """
+    environ = get_ssh_env(sock_path)
+    device_mutex = threading.Lock()
+    quit_event = threading.Event()
+    handle_conn = functools.partial(win_server.handle_connection,
+                                    handler=handler,
+                                    mutex=device_mutex,
+                                    quit_event=quit_event)
+    kwargs = dict(pipe_name=sock_path,
+                  handle_conn=handle_conn,
+                  quit_event=quit_event,
+                  timeout=timeout)
+    with server.spawn(win_server.server_thread, kwargs):
+        try:
+            yield environ
+        finally:
+            log.debug('closing server')
+            quit_event.set()
+
+
+@contextlib.contextmanager
+def serve_unix(handler, sock_path, timeout=UNIX_SOCKET_TIMEOUT):
     """
     Start the ssh-agent server on a UNIX-domain socket.
 
     If no connection is made during the specified timeout,
     retry until the context is over.
     """
-    ssh_version = subprocess.check_output(['ssh', '-V'],
-                                          stderr=subprocess.STDOUT)
-    log.debug('local SSH version: %r', ssh_version)
-    environ = {'SSH_AUTH_SOCK': sock_path, 'SSH_AGENT_PID': str(os.getpid())}
+    environ = get_ssh_env(sock_path)
     device_mutex = threading.Lock()
     with server.unix_domain_socket_server(sock_path) as sock:
         sock.settimeout(timeout)
@@ -154,12 +195,15 @@ def run_server(conn, command, sock_path, debug, timeout):
     ret = 0
     try:
         handler = protocol.Handler(conn=conn, debug=debug)
-        with serve(handler=handler, sock_path=sock_path,
-                   timeout=timeout) as env:
+        serve_platform = serve_win if sys.platform == 'win32' else serve_unix
+        with serve_platform(handler=handler, sock_path=sock_path, timeout=timeout) as env:
             if command:
                 ret = server.run_process(command=command, environ=env)
             else:
-                signal.pause()  # wait for signal (e.g. SIGINT)
+                try:
+                    signal.pause() # wait for signal (e.g. SIGINT)
+                except AttributeError:
+                    sys.stdin.read() # Windows doesn't support signal.pause
     except KeyboardInterrupt:
         log.info('server stopped')
     return ret
@@ -221,10 +265,9 @@ class JustInTimeConnection:
         """Store public keys as temporary SSH identity files."""
         if not self.public_keys_tempfiles:
             for pk in self.public_keys():
-                f = tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w')
-                f.write(pk)
-                f.flush()
-                self.public_keys_tempfiles.append(f)
+                with tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w', delete=False, newline='') as f:
+                    f.write(pk)
+                    self.public_keys_tempfiles.append(f.name)
 
         return self.public_keys_tempfiles
 
@@ -241,13 +284,16 @@ def _dummy_context():
 
 def _get_sock_path(args):
     sock_path = args.sock_path
-    if not sock_path:
-        if args.foreground:
-            log.error('running in foreground mode requires specifying UNIX socket path')
-            sys.exit(1)
-        else:
-            sock_path = tempfile.mktemp(prefix='trezor-ssh-agent-')
-    return sock_path
+    if sock_path:
+        return sock_path
+    elif args.foreground:
+        log.error('running in foreground mode requires specifying ' + SOCK_TYPE)
+        sys.exit(1)
+    elif sys.platform == 'win32':
+        suffix = random.choices(string.ascii_letters, k=10)
+        return '\\\\.\pipe\\trezor-ssh-agent-' + ''.join(suffix)
+    else:
+        return tempfile.mktemp(prefix='trezor-ssh-agent-')
 
 
 @handle_connection_error
@@ -286,7 +332,7 @@ def main(device_type):
         command = ['ssh'] + ssh_args(conn) + args.command
     elif args.mosh:
         command = ['mosh'] + mosh_args(conn) + args.command
-    elif args.daemonize:
+    elif daemon and args.daemonize:
         out = 'SSH_AUTH_SOCK={0}; export SSH_AUTH_SOCK;\n'.format(sock_path)
         sys.stdout.write(out)
         sys.stdout.flush()
@@ -300,7 +346,7 @@ def main(device_type):
         command = os.environ['SHELL']
         sys.stdin.close()
 
-    if command or args.daemonize or args.foreground:
+    if command or (daemon and args.daemonize) or args.foreground:
         with context:
             return run_server(conn=conn, command=command, sock_path=sock_path,
                               debug=args.debug, timeout=args.timeout)
