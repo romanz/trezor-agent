@@ -17,6 +17,7 @@ import pkg_resources
 
 from .. import device, formats, server, util
 from . import client, protocol
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -267,7 +268,7 @@ def main(device_type):
         identities = list(parse_config(contents))
     else:
         identities = [device.interface.Identity(
-            identity_str=args.identity, curve_name=args.ecdsa_curve_name)]
+            identity_str=args.identity, curve_name=args.ecdsa_curve_name, keyflag=KeyFlags.CERTIFY_AND_SIGN)]
     for index, identity in enumerate(identities):
         identity.identity_dict['proto'] = 'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
