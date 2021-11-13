@@ -31,17 +31,23 @@ class Client:
 
     def sign_ssh_challenge(self, blob, identity):
         """Sign given blob using a private key on the device."""
-        msg = _parse_ssh_blob(blob)
-        log.debug('%s: user %r via %r (%r)',
-                  msg['conn'], msg['user'], msg['auth'], msg['key_type'])
-        log.debug('nonce: %r', msg['nonce'])
-        fp = msg['public_key']['fingerprint']
-        log.debug('fingerprint: %s', fp)
-        log.debug('hidden challenge size: %d bytes', len(blob))
+        try:
+            msg = _parse_ssh_blob(blob)
+            log.debug('parsed')
+            log.debug('%s: user %r via %r (%r)',
+                      msg['conn'], msg['user'], msg['auth'], msg['key_type'])
+            log.debug('nonce: %r', msg['nonce'])
+            fp = msg['public_key']['fingerprint']
+            log.debug('fingerprint: %s', fp)
+            log.debug('hidden challenge size: %d bytes', len(blob))
 
-        log.info('please confirm user "%s" login to "%s" using %s...',
-                 msg['user'].decode('ascii'), identity.to_string(),
-                 self.device)
+            log.info('please confirm user "%s" login to "%s" using %s...',
+                     msg['user'].decode('ascii'), identity.to_string(),
+                     self.device)
+        except:
+            log.info('please confirm signing for "%s" using %s...',
+                     identity.to_string(),
+                     self.device)
 
         with self.device:
             return self.device.sign(blob=blob, identity=identity)
