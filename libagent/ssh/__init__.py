@@ -114,6 +114,10 @@ def create_agent_parser(device_type):
 
     p.add_argument('identity', type=_to_unicode, default=None,
                    help='proto://[user@]host[:port][/path]')
+
+    p.add_argument('-i', '--additional_identities', type=_to_unicode, default=[], action='append',
+                   help='proto://[user@]host[:port][/path]')
+
     p.add_argument('command', type=str, nargs='*', metavar='ARGUMENT',
                    help='command to run under the SSH agent')
     return p
@@ -250,12 +254,19 @@ def _get_sock_path(args):
     return sock_path
 
 
+def _add_additional_identities(identities, additional_identities, ecdsa_curve_name):
+    for identity in additional_identities:
+        identities.append(device.interface.Identity(
+            identity_str=identity, curve_name=ecdsa_curve_name))
+
+
 @handle_connection_error
 def main(device_type):
     """Run ssh-agent using given hardware client factory."""
     args = create_agent_parser(device_type=device_type).parse_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
+    identities = []
     public_keys = None
     filename = None
     if args.identity.startswith('/'):
@@ -268,6 +279,9 @@ def main(device_type):
     else:
         identities = [device.interface.Identity(
             identity_str=args.identity, curve_name=args.ecdsa_curve_name)]
+
+    _add_additional_identities(identities, args.additional_identities, args.ecdsa_curve_name)
+
     for index, identity in enumerate(identities):
         identity.identity_dict['proto'] = 'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
