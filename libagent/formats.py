@@ -3,7 +3,6 @@ import base64
 import hashlib
 import io
 import logging
-
 from enum import IntEnum
 
 import ecdsa

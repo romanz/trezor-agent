@@ -3,8 +3,8 @@ import io
 import logging
 
 from .. import util
-from . import decode, keyring, protocol
 from ..formats import KeyFlags
+from . import decode, keyring, protocol
 
 log = logging.getLogger(__name__)
 

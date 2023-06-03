@@ -11,8 +11,8 @@ import ecdsa
 import nacl.signing
 import unidecode
 
-from . import interface
 from ..formats import KeyFlags
+from . import interface
 
 # import pgpy
 # from pgpy import PGPKey

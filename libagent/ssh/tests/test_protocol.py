@@ -1,7 +1,7 @@
-from ...formats import KeyFlags
 import mock
 import pytest
 
+from ...formats import KeyFlags
 from .. import device, formats, protocol
 
 # pylint: disable=line-too-long

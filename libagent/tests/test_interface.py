@@ -1,5 +1,5 @@
-from ..formats import KeyFlags
 from ..device import interface
+from ..formats import KeyFlags
 
 
 def test_unicode():

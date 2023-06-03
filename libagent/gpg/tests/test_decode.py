@@ -1,8 +1,8 @@
 import binascii
 import glob
 import io
-import pathlib
 import os
+import pathlib
 
 import pytest
 

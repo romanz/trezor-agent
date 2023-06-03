@@ -1,9 +1,9 @@
 import io
-from ...formats import KeyFlags
 
 import mock
 import pytest
 
+from ...formats import KeyFlags
 from .. import client, device, formats, util
 
 ADDR = [2147483661, 2810943954, 3938368396, 3454558782, 3848009040]

@@ -16,8 +16,8 @@ import daemon
 import pkg_resources
 
 from .. import device, formats, server, util
-from . import client, protocol
 from ..formats import KeyFlags
+from . import client, protocol
 
 log = logging.getLogger(__name__)
 

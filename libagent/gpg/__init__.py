@@ -23,8 +23,8 @@ import pkg_resources
 import semver
 
 from .. import device, formats, server, util
-from . import agent, client, encode, keyring, protocol
 from ..formats import KeyFlags, keyflag_to_index
+from . import agent, client, encode, keyring, protocol
 
 log = logging.getLogger(__name__)
 
