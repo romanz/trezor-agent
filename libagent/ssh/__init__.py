@@ -182,7 +182,8 @@ def parse_config(contents):
     """Parse config file into a list of Identity objects."""
     for identity_str, curve_name in re.findall(r'\<(.*?)\|(.*?)\>', contents):
         yield device.interface.Identity(identity_str=identity_str,
-                                        curve_name=curve_name)
+                                        curve_name=curve_name,
+                                        keyflag=KeyFlags.CERTIFY_AND_SIGN)
 
 
 def import_public_keys(contents):

@@ -1,5 +1,4 @@
 import binascii
-import glob
 import io
 import os
 import pathlib
@@ -71,6 +70,7 @@ def test_load_by_keygrip():
 
         # Primary Key
         p_kg = binascii.unhexlify("930E34F72D88B9BF4FA5372D7ED493D0DC738DAD")
+        # pylint: disable=unused-variable
         data, uids, keyflag = decode.load_by_keygrip(f.read(), p_kg)
         f.seek(0)
 
@@ -79,6 +79,7 @@ def test_load_by_keygrip():
 
         # Signing Subkey
         s_kg = binascii.unhexlify("94F380990548D9644271F149D4FDF0D808F54127")
+        # pylint: disable=unused-variable
         data, uids, keyflag = decode.load_by_keygrip(f.read(), s_kg)
         f.seek(0)
 
@@ -111,6 +112,7 @@ def test_keygrips():
     ]
 
     for keygrip in keygrips:
+        # pylint: disable=unused-variable
         pubkey_dict, user_ids, keyflag = decode.load_by_keygrip(pubkey_bytes, keygrip)
         assert pubkey_dict['keygrip'] == keygrip
         assert [u['value'] for u in user_ids] == [

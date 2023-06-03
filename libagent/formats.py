@@ -35,6 +35,8 @@ hashfunc = hashlib.sha256
 
 
 class KeyFlags(IntEnum):
+    """Flags indicating a key's purpose."""
+
     CERTIFY = 1
     SIGN = 2
     ENCRYPT = 12  # (4|8)
@@ -43,6 +45,7 @@ class KeyFlags(IntEnum):
 
 
 def keyflag_to_index(keyflag):
+    """Convert a keyflag to an index."""
     return {
         KeyFlags.CERTIFY: 0,          # SLIP 13
         KeyFlags.SIGN: 1,             # SLIP 13

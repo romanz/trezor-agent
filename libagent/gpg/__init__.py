@@ -29,8 +29,10 @@ from . import agent, client, encode, keyring, protocol
 log = logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-arguments,too-many-locals
 def append_subkeys(client_obj, primary_bytes, user_id, curve_name, creation_time,
                    signing=True, encryption=True, authentication=False):
+    """Append subkeys to the primary key."""
     c = client_obj
 
     certifier = client.create_identity(

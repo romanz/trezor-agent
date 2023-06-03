@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def _create_identity(user_id):
-    result = interface.Identity(identity_str='signify://', curve_name='ed25519')
+    result = interface.Identity(identity_str='signify://', curve_name='ed25519', keyflag=None)
     result.identity_dict['host'] = user_id
     return result
 

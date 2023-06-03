@@ -95,6 +95,7 @@ def _parse_embedded_signatures(subpackets):
             yield _parse_signature(util.Reader(stream))
 
 
+# pylint: disable=inconsistent-return-statements
 def _parse_key_id(subpackets):
     for packet in subpackets:
         data = bytearray(packet)
@@ -103,6 +104,7 @@ def _parse_key_id(subpackets):
             return bytes(key_id)
 
 
+# pylint: disable=inconsistent-return-statements
 def _parse_keyflags(subpackets):
     for packet in subpackets:
         data = bytearray(packet)
@@ -339,6 +341,7 @@ def load_by_keygrip(pubkey_bytes, keygrip):
         # The key packet contains the keygrip
         # The signature packet contains the keyflag in the hashed area
         # Map them together
+        # pylint: disable=consider-using-enumerate
         mapping = {}
         for i in range(0, len(packets)):
             p = packets[i]

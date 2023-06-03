@@ -199,10 +199,10 @@ class PublicKey:
         self.verifying_key = verifying_key
         self.keyflag = keyflag
 
-        if keyflag == KeyFlags.CERTIFY or \
-           keyflag == KeyFlags.SIGN or \
-           keyflag == KeyFlags.AUTHENTICATE or \
-           keyflag == KeyFlags.CERTIFY_AND_SIGN:
+        if keyflag in (KeyFlags.CERTIFY,
+                       KeyFlags.SIGN,
+                       KeyFlags.AUTHENTICATE,
+                       KeyFlags.CERTIFY_AND_SIGN):
 
             self.algo_id = self.curve_info['algo_id']
             self.ecdh_packet = b''
@@ -231,6 +231,7 @@ class PublicKey:
         return b'\x99' + util.prefix_len('>H', self.data())
 
     def fingerprint(self):
+        """Key fingerprint."""
         return hashlib.sha1(self.data_to_hash()).digest()
 
     def key_id(self):

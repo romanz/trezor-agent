@@ -4,7 +4,6 @@ import logging
 
 from .. import formats, util
 from ..device import interface
-from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 

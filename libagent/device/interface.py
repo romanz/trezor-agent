@@ -82,13 +82,12 @@ class Identity:
 
     def to_string(self):
         """Return identity serialized to string."""
-        return u'<{}|{}|{}>'.format(self.identity_dict['index'],
-                                    identity_to_string(self.identity_dict),
-                                    self.curve_name)
+        return '<{}|{}|{}>'.format(
+            self.identity_dict['index'], identity_to_string(self.identity_dict),
+            self.curve_name)
 
     def get_bip32_address(self):
         """Compute BIP32 derivation address according to SLIP-0013/0017."""
-
         # i = keyflag_to_index(keyflag)
         index = struct.pack('<L', self.identity_dict['index'])
         addr = index + self.to_bytes()
@@ -96,10 +95,10 @@ class Identity:
         digest = hashlib.sha256(addr).digest()
         s = io.BytesIO(bytearray(digest))
 
-        if self.keyflag == KeyFlags.CERTIFY or \
-           self.keyflag == KeyFlags.SIGN or \
-           self.keyflag == KeyFlags.AUTHENTICATE or \
-           self.keyflag == KeyFlags.CERTIFY_AND_SIGN:
+        if self.keyflag in (KeyFlags.CERTIFY,
+                            KeyFlags.SIGN,
+                            KeyFlags.AUTHENTICATE,
+                            KeyFlags.CERTIFY_AND_SIGN):
             addr_0 = 13
         elif self.keyflag == KeyFlags.ENCRYPT:
             addr_0 = 17
@@ -108,12 +107,13 @@ class Identity:
         hardened = 0x80000000
         return [(hardened | value) for value in address_n]
 
+    # pylint: disable=inconsistent-return-statements
     def get_curve_name(self):
         """Return correct curve name for device operations."""
-        if self.keyflag == KeyFlags.CERTIFY or \
-           self.keyflag == KeyFlags.SIGN or \
-           self.keyflag == KeyFlags.AUTHENTICATE or \
-           self.keyflag == KeyFlags.CERTIFY_AND_SIGN:
+        if self.keyflag in (KeyFlags.CERTIFY,
+                            KeyFlags.SIGN,
+                            KeyFlags.AUTHENTICATE,
+                            KeyFlags.CERTIFY_AND_SIGN):
             return self.curve_name
         elif self.keyflag == KeyFlags.ENCRYPT:
             return formats.get_ecdh_curve_name(self.curve_name)

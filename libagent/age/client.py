@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 def create_identity(user_id):
     """Create AGE identity for hardware device."""
-    result = interface.Identity(identity_str='age://', curve_name="ed25519")
+    result = interface.Identity(identity_str='age://', curve_name="ed25519", keyflag=None)
     result.identity_dict['host'] = user_id
     return result
 
