@@ -199,8 +199,8 @@ class PublicKey:
         self.verifying_key = verifying_key
         self.keyflag = keyflag
 
-        if keyflag == KeyFlags.CERTIFY      or \
-           keyflag == KeyFlags.SIGN         or \
+        if keyflag == KeyFlags.CERTIFY or \
+           keyflag == KeyFlags.SIGN or \
            keyflag == KeyFlags.AUTHENTICATE or \
            keyflag == KeyFlags.CERTIFY_AND_SIGN:
 

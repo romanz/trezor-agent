@@ -62,7 +62,7 @@ def create_subkey(primary_bytes, subkey, signer_func, cross_signer_func=None, se
 
         # Primary Key Binding Signature
         hashed_subpackets = [
-            protocol.subpacket_time(subkey.created + 1), # signature time
+            protocol.subpacket_time(subkey.created + 1),  # signature time
             protocol.subpacket_bytes(33, b'\x04' + subkey.fingerprint())
         ]
         unhashed_subpackets = [

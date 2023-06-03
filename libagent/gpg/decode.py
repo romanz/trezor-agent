@@ -98,7 +98,7 @@ def _parse_embedded_signatures(subpackets):
 def _parse_key_id(subpackets):
     for packet in subpackets:
         data = bytearray(packet)
-        if data[0] == 16: # 0x10
+        if data[0] == 16:  # 0x10
             key_id = data[1:]
             return bytes(key_id)
 
@@ -106,7 +106,7 @@ def _parse_key_id(subpackets):
 def _parse_keyflags(subpackets):
     for packet in subpackets:
         data = bytearray(packet)
-        if data[0] == 27: # 0x1B
+        if data[0] == 27:  # 0x1B
             keyflags = data[1]
             return keyflags
 

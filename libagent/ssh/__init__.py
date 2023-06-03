@@ -268,7 +268,8 @@ def main(device_type):
         identities = list(parse_config(contents))
     else:
         identities = [device.interface.Identity(
-            identity_str=args.identity, curve_name=args.ecdsa_curve_name, keyflag=KeyFlags.CERTIFY_AND_SIGN)]
+            identity_str=args.identity, curve_name=args.ecdsa_curve_name,
+            keyflag=KeyFlags.CERTIFY_AND_SIGN)]
     for index, identity in enumerate(identities):
         identity.identity_dict['proto'] = 'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
