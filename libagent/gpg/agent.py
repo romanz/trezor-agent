@@ -159,18 +159,17 @@ class Handler:
         In case of missing keygrip, KeyError will be raised.
         """
         keygrip_bytes = binascii.unhexlify(keygrip)
-        pubkey_dict, user_ids = decode.load_by_keygrip(
+        pubkey_dict, user_ids, keyflag = decode.load_by_keygrip(
             pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
         # We assume the first user ID is used to generate TREZOR-based GPG keys.
         user_id = user_ids[0]['value'].decode('utf-8')
         curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
-        ecdh = pubkey_dict['algo'] == protocol.ECDH_ALGO_ID
-
-        identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-        verifying_key = self.client.pubkey(identity=identity, ecdh=ecdh)
+        identity = client.create_identity(user_id=user_id, curve_name=curve_name, keyflag=keyflag)
+        verifying_key = self.client.pubkey(identity=identity)
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
-            verifying_key=verifying_key, ecdh=ecdh)
+            verifying_key=verifying_key, keyflag=keyflag)
+
         assert pubkey.key_id() == pubkey_dict['key_id']
         assert pubkey.keygrip() == keygrip_bytes
         return identity

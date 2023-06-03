@@ -1,5 +1,8 @@
+import binascii
+import glob
 import io
 import pathlib
+import os
 
 import pytest
 
@@ -60,6 +63,42 @@ def test_load_by_keygrip_missing():
     with pytest.raises(KeyError):
         decode.load_by_keygrip(pubkey_bytes=b'', keygrip=b'')
 
+def test_load_by_keygrip():
+    # contrib/trezor_agent_recover.py --identity "test@example.com" --timestamp 0 --mnemonic "all all all all all all all all all all all all"
+    with open(os.path.join(cwd, "49717CC09A348E5DAAF345903784A7264F609C5F.gpg"), 'rb') as f:
+
+        # Primary Key
+        p_kg = binascii.unhexlify("930E34F72D88B9BF4FA5372D7ED493D0DC738DAD")
+        data, uids, keyflag = decode.load_by_keygrip(f.read(), p_kg)
+        f.seek(0)
+
+        assert data['keygrip'] == p_kg
+        assert keyflag == 1
+
+        # Signing Subkey
+        s_kg = binascii.unhexlify("94F380990548D9644271F149D4FDF0D808F54127")
+        data, uids, keyflag = decode.load_by_keygrip(f.read(), s_kg)
+        f.seek(0)
+
+        assert data['keygrip'] == s_kg
+        assert keyflag == 2
+
+        # Authentication Subkey
+        a_kg = binascii.unhexlify("4D2EB4C79914B876AAFA941C7FB51B72E4D348BD")
+        data, uids, keyflag = decode.load_by_keygrip(f.read(), a_kg)
+        f.seek(0)
+
+        assert data['keygrip'] == a_kg
+        assert keyflag == 32 # 0x20
+
+        # Encryption Subkey
+        e_kg = binascii.unhexlify("CCAB28DB355C0993CF6E6F994066B08A7F873127")
+        data, uids, keyflag = decode.load_by_keygrip(f.read(), e_kg)
+        f.seek(0)
+
+        assert data['keygrip'] == e_kg
+        assert keyflag == 12 # 0x4 | 0x8
+
 
 def test_keygrips():
     pubkey_bytes = (cwd / "romanz-pubkey.gpg").open("rb").read()
@@ -70,7 +109,7 @@ def test_keygrips():
     ]
 
     for keygrip in keygrips:
-        pubkey_dict, user_ids = decode.load_by_keygrip(pubkey_bytes, keygrip)
+        pubkey_dict, user_ids, keyflag = decode.load_by_keygrip(pubkey_bytes, keygrip)
         assert pubkey_dict['keygrip'] == keygrip
         assert [u['value'] for u in user_ids] == [
             b'Roman Zeyde <roman.zeyde@gmail.com>',

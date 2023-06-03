@@ -8,6 +8,7 @@ import struct
 import nacl.signing
 
 from .. import formats, util
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
@@ -190,19 +191,26 @@ def get_curve_name_by_oid(oid):
 class PublicKey:
     """GPG representation for public key packets."""
 
-    def __init__(self, curve_name, created, verifying_key, ecdh=False):
+    def __init__(self, curve_name, created, verifying_key, keyflag=KeyFlags.CERTIFY):
         """Contruct using a ECDSA VerifyingKey object."""
         self.curve_name = curve_name
         self.curve_info = SUPPORTED_CURVES[curve_name]
         self.created = int(created)  # time since Epoch
         self.verifying_key = verifying_key
-        self.ecdh = bool(ecdh)
-        if ecdh:
-            self.algo_id = ECDH_ALGO_ID
-            self.ecdh_packet = b'\x03\x01\x08\x07'
-        else:
+        self.keyflag = keyflag
+
+        if keyflag == KeyFlags.CERTIFY      or \
+           keyflag == KeyFlags.SIGN         or \
+           keyflag == KeyFlags.AUTHENTICATE or \
+           keyflag == KeyFlags.CERTIFY_AND_SIGN:
+
             self.algo_id = self.curve_info['algo_id']
             self.ecdh_packet = b''
+
+        elif keyflag == KeyFlags.ENCRYPT:
+
+            self.algo_id = ECDH_ALGO_ID
+            self.ecdh_packet = b'\x03\x01\x08\x07'
 
     def keygrip(self):
         """Compute GPG keygrip of the verifying key."""
@@ -222,12 +230,12 @@ class PublicKey:
         """Data for digest computation."""
         return b'\x99' + util.prefix_len('>H', self.data())
 
-    def _fingerprint(self):
+    def fingerprint(self):
         return hashlib.sha1(self.data_to_hash()).digest()
 
     def key_id(self):
         """Short (8 byte) GPG key ID."""
-        return self._fingerprint()[-8:]
+        return self.fingerprint()[-8:]
 
     def __repr__(self):
         """Short (8 hexadecimal digits) GPG key ID."""

@@ -79,10 +79,10 @@ class LedgerNanoS(interface.Device):
             raise interface.DeviceError(
                 'Error ({}) communicating with {}'.format(e, self))
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity):
         """Get PublicKey object for specified BIP32 address and elliptic curve."""
-        curve_name = identity.get_curve_name(ecdh)
-        path = _expand_path(identity.get_bip32_address(ecdh))
+        curve_name = identity.get_curve_name()
+        path = _expand_path(identity.get_bip32_address())
         if curve_name == 'nist256p1':
             p2 = '01'
         else:
@@ -101,7 +101,7 @@ class LedgerNanoS(interface.Device):
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
         # pylint: disable=too-many-locals,too-many-branches
-        path = _expand_path(identity.get_bip32_address(ecdh=False))
+        path = _expand_path(identity.get_bip32_address())
         offset = 0
         result = None
         while offset != len(blob):
@@ -157,7 +157,7 @@ class LedgerNanoS(interface.Device):
 
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
-        path = _expand_path(identity.get_bip32_address(ecdh=True))
+        path = _expand_path(identity.get_bip32_address())
         if identity.curve_name == 'nist256p1':
             p2 = '01'
         else:

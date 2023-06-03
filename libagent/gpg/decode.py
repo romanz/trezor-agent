@@ -95,6 +95,22 @@ def _parse_embedded_signatures(subpackets):
             yield _parse_signature(util.Reader(stream))
 
 
+def _parse_key_id(subpackets):
+    for packet in subpackets:
+        data = bytearray(packet)
+        if data[0] == 16: # 0x10
+            key_id = data[1:]
+            return bytes(key_id)
+
+
+def _parse_keyflags(subpackets):
+    for packet in subpackets:
+        data = bytearray(packet)
+        if data[0] == 27: # 0x1B
+            keyflags = data[1]
+            return keyflags
+
+
 def has_custom_subpacket(signature_packet):
     """Detect our custom public keys by matching subpacket data."""
     return any(protocol.CUSTOM_KEY_LABEL == subpacket[1:]
@@ -112,6 +128,9 @@ def _parse_signature(stream):
         p['pubkey_alg'] = stream.readfmt('B')
         p['hash_alg'] = stream.readfmt('B')
         p['hashed_subpackets'] = parse_subpackets(stream)
+    keyflag = _parse_keyflags(p['hashed_subpackets'])
+    if keyflag:
+        p['keyflag'] = keyflag
 
     # https://tools.ietf.org/html/rfc4880#section-5.2.4
     tail_to_hash = b'\x04\xff' + struct.pack('>L', to_hash.tell())
@@ -123,6 +142,9 @@ def _parse_signature(stream):
     if embedded:
         log.debug('embedded sigs: %s', embedded)
         p['embedded'] = embedded
+    key_id = _parse_key_id(p['unhashed_subpackets'])
+    if key_id:
+        p['key_id'] = key_id
 
     p['hash_prefix'] = stream.readfmt('2s')
     if p['pubkey_alg'] in ECDSA_ALGO_IDS:
@@ -182,7 +204,8 @@ def _parse_pubkey(stream, packet_type='pubkey'):
     packet_data = packet.getvalue()
     data_to_hash = (b'\x99' + struct.pack('>H', len(packet_data)) +
                     packet_data)
-    p['key_id'] = hashlib.sha1(data_to_hash).digest()[-8:]
+    p['fingerprint'] = hashlib.sha1(data_to_hash).digest()
+    p['key_id'] = p['fingerprint'][-8:]
     p['_to_hash'] = data_to_hash
     log.debug('key ID: %s', util.hexlify(p['key_id']))
     return p
@@ -286,7 +309,8 @@ def _parse_pubkey_packets(pubkey_bytes):
     stream = io.BytesIO(pubkey_bytes)
     packets_per_pubkey = []
     for p in parse_packets(stream):
-        if p['type'] == 'pubkey':
+        if p['type'] == 'pubkey' or \
+           p['type'] == 'subkey':
             # Add a new packet list for each pubkey.
             packets_per_pubkey.append([])
         packets_per_pubkey[-1].append(p)
@@ -294,12 +318,46 @@ def _parse_pubkey_packets(pubkey_bytes):
 
 
 def load_by_keygrip(pubkey_bytes, keygrip):
-    """Return public key and first user ID for specified keygrip."""
-    for packets in _parse_pubkey_packets(pubkey_bytes):
-        user_ids = [p for p in packets if p['type'] == 'user_id']
+    """Return key, user IDs, and keyflag for specified keygrip."""
+    stream = io.BytesIO(pubkey_bytes)
+    packets = list(parse_packets(stream))
+    packets_per_key = []
+    user_ids = []
+    for p in packets:
+        if p['type'] == 'pubkey' or \
+           p['type'] == 'subkey':
+            # Add a new packet list for each key.
+            packets_per_key.append([])
+        packets_per_key[-1].append(p)
+
+    for packets in packets_per_key:
+        user_ids += [p for p in packets if p['type'] == 'user_id']
+
+    for packets in packets_per_key:
+
+        # Each key packet is followed by a signature packet
+        # The key packet contains the keygrip
+        # The signature packet contains the keyflag in the hashed area
+        # Map them together
+        mapping = {}
+        for i in range(0, len(packets)):
+            p = packets[i]
+            if p['type'] == 'pubkey' or \
+               p['type'] == 'subkey':
+                kg = p['keygrip']
+                for j in range(i+1, len(packets)):
+                    sp = packets[j]
+                    if sp['type'] == 'signature':
+                        keyflag = sp['keyflag']
+                        mapping[kg] = keyflag
+                        break
+            else:
+                continue
+
         for p in packets:
             if p.get('keygrip') == keygrip:
-                return p, user_ids
+                return p, user_ids, mapping[keygrip]
+
     raise KeyError('{} keygrip not found'.format(util.hexlify(keygrip)))
 
 
