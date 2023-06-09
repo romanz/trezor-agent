@@ -10,9 +10,9 @@ from ..device import interface
 log = logging.getLogger(__name__)
 
 
-def create_identity(user_id):
+def create_identity(user_id, keyflag):
     """Create AGE identity for hardware device."""
-    result = interface.Identity(identity_str='age://', curve_name="ed25519", keyflag=None)
+    result = interface.Identity(identity_str='age://', curve_name="ed25519", keyflag=keyflag)
     result.identity_dict['host'] = user_id
     return result
 
@@ -24,10 +24,10 @@ class Client:
         """C-tor."""
         self.device = device
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity):
         """Return public key as VerifyingKey object."""
         with self.device:
-            pubkey = bytes(self.device.pubkey(ecdh=ecdh, identity=identity))
+            pubkey = bytes(self.device.pubkey(identity=identity))
             assert len(pubkey) == 32
             return pubkey
 

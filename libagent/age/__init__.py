@@ -20,6 +20,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 from .. import device, util
+from ..formats import KeyFlags
 from . import client
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def run_pubkey(device_type, args):
                 'change without backwards compatibility!')
 
     c = client.Client(device=device_type())
-    pubkey = c.pubkey(identity=client.create_identity(args.identity), ecdh=True)
+    pubkey = c.pubkey(identity=client.create_identity(args.identity, KeyFlags.ENCRYPT))
     recipient = bech32_encode(prefix="age", data=pubkey)
     print(f"# recipient: {recipient}")
     print(f"# SLIP-0017: {args.identity}")
@@ -105,7 +106,7 @@ def run_decrypt(device_type, args):
         if line.startswith("-> add-identity "):
             encoded = line.split(" ")[-1].lower()
             data = bech32_decode("age-plugin-trezor-", encoded)
-            identity = client.create_identity(data.decode())
+            identity = client.create_identity(data.decode(), KeyFlags.ENCRYPT)
             identities.append(identity)
 
         elif line.startswith("-> recipient-stanza "):
