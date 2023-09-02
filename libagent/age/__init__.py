@@ -172,8 +172,10 @@ def main(device_type):
     try:
         if args.identity:
             run_pubkey(device_type=device_type, args=args)
-        elif args.age_plugin:
+        elif args.age_plugin == 'identity-v1':
             run_decrypt(device_type=device_type, args=args)
+        else:
+            log.error("Unsupported state machine: %r", args.age_plugin)
     except Exception as e:  # pylint: disable=broad-except
         log.exception("age plugin failed: %s", e)
 
