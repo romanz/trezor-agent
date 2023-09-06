@@ -4,7 +4,7 @@ from setuptools import setup
 setup(
     name='libagent',
     version='0.14.8',
-    description='Using hardware wallets as SSH/GPG agent',
+    description='Using hardware wallets as SSH/GPG/age agent',
     author='Roman Zeyde',
     author_email='dev@romanzey.de',
     url='http://github.com/romanz/trezor-agent',
