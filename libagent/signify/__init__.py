@@ -9,12 +9,13 @@ import time
 
 from .. import util
 from ..device import interface, ui
+from ..formats import KeyFlags
 
 log = logging.getLogger(__name__)
 
 
-def _create_identity(user_id):
-    result = interface.Identity(identity_str='signify://', curve_name='ed25519')
+def _create_identity(user_id, keyflag):
+    result = interface.Identity(identity_str='signify://', curve_name='ed25519', keyflag=keyflag)
     result.identity_dict['host'] = user_id
     return result
 
@@ -29,7 +30,7 @@ class Client:
     def pubkey(self, identity):
         """Return public key as VerifyingKey object."""
         with self.device:
-            return bytes(self.device.pubkey(ecdh=False, identity=identity))
+            return bytes(self.device.pubkey(identity=identity))
 
     def sign_with_pubkey(self, identity, data):
         """Sign the data and return a signature."""
@@ -61,7 +62,7 @@ def run_pubkey(device_type, args):
                 'so please note that the key derivation, API, and features '
                 'may change without backwards compatibility!')
 
-    identity = _create_identity(user_id=args.user_id)
+    identity = _create_identity(user_id=args.user_id, keyflag=KeyFlags.CERTIFY_AND_SIGN)
     pubkey = Client(device=device_type()).pubkey(identity=identity)
     comment = f'untrusted comment: identity {identity.to_string()}\n'
     payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
@@ -71,7 +72,7 @@ def run_pubkey(device_type, args):
 def run_sign(device_type, args):
     """Prehash & sign an input blob using Ed25519."""
     util.setup_logging(verbosity=args.verbose)
-    identity = _create_identity(user_id=args.user_id)
+    identity = _create_identity(user_id=args.user_id, keyflag=KeyFlags.CERTIFY_AND_SIGN)
 
     data_to_sign = sys.stdin.buffer.read()
     sig_alg = ALG_SIGNIFY

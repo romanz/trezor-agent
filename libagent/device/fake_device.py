@@ -42,7 +42,7 @@ class FakeDevice(interface.Device):
     def close(self):
         """Close the device."""
 
-    def pubkey(self, identity, ecdh=False):
+    def pubkey(self, identity):
         """Return public key."""
         _verify_support(identity)
         data = self.vk.to_string()
