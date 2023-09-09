@@ -53,7 +53,7 @@ def msg_code(name):
 def msg_name(code):
     """Convert integer message code into a string name."""
     ids = {v: k for k, v in COMMANDS.items()}
-    return ids[code]
+    return ids[code] if code in ids else str(code)
 
 
 def failure():

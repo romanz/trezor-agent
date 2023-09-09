@@ -121,7 +121,7 @@ def run_decrypt(device_type, args):
     for file_index, stanzas in stanza_map.items():
         _handle_single_file(file_index, stanzas, identities, c)
 
-    sys.stdout.write('-> done\n\n')
+    sys.stdout.buffer.write('-> done\n\n'.encode())
     sys.stdout.flush()
     sys.stdout.close()
 
@@ -132,7 +132,7 @@ def _handle_single_file(file_index, stanzas, identities, c):
         for identity in identities:
             id_str = identity.to_string()
             msg = base64_encode(f'Please confirm {id_str} decryption on {d} device...'.encode())
-            sys.stdout.write(f'-> msg\n{msg}\n')
+            sys.stdout.buffer.write(f'-> msg\n{msg}\n'.encode())
             sys.stdout.flush()
 
             key = c.ecdh(identity=identity, peer_pubkey=peer_pubkey)
@@ -140,7 +140,7 @@ def _handle_single_file(file_index, stanzas, identities, c):
             if not result:
                 continue
 
-            sys.stdout.write(f'-> file-key {file_index}\n{base64_encode(result)}\n')
+            sys.stdout.buffer.write(f'-> file-key {file_index}\n{base64_encode(result)}\n'.encode())
             sys.stdout.flush()
             return
 

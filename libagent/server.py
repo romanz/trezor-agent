@@ -4,9 +4,13 @@ import logging
 import os
 import socket
 import subprocess
+import sys
 import threading
 
 from . import util
+
+if sys.platform == 'win32':
+    from . import win_server
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +32,10 @@ def unix_domain_socket_server(sock_path):
     Listen on it, and delete it after the generated context is over.
     """
     log.debug('serving on %s', sock_path)
+    if sys.platform == 'win32':
+        # Return a named pipe emulating a socket server interface
+        yield win_server.Server(sock_path)
+        return
     remove_file(sock_path)
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

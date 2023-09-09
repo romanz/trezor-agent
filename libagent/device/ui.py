@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 from .. import util
+from ..gpg import keyring
 
 try:
     from trezorlib.client import PASSPHRASE_ON_DEVICE
@@ -21,7 +22,7 @@ class UI:
 
     def __init__(self, device_type, config=None):
         """C-tor."""
-        default_pinentry = 'pinentry'  # by default, use GnuPG pinentry tool
+        default_pinentry = keyring.get_pinentry_binary()  # by default, use GnuPG pinentry tool
         if config is None:
             config = {}
         self.pin_entry_binary = config.get('pin_entry_binary',
@@ -78,7 +79,8 @@ class UI:
 def create_default_options_getter():
     """Return current TTY and DISPLAY settings for GnuPG pinentry."""
     options = []
-    if sys.stdin.isatty():  # short-circuit calling `tty`
+    # Windows reports that it has a TTY but throws FileNotFoundError
+    if sys.platform != 'win32' and sys.stdin.isatty():  # short-circuit calling `tty`
         try:
             ttyname = subprocess.check_output(args=['tty']).strip()
             options.append(b'ttyname=' + ttyname)
@@ -88,7 +90,8 @@ def create_default_options_getter():
     display = os.environ.get('DISPLAY')
     if display is not None:
         options.append('display={}'.format(display).encode('ascii'))
-    else:
+    # Windows likely doesn't support this anyway
+    elif sys.platform != 'win32':
         log.warning('DISPLAY not defined')
 
     log.info('using %s for pinentry options', options)

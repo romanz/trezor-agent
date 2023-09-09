@@ -1,18 +1,26 @@
 """SSH-agent implementation using hardware authentication devices."""
+import argparse
 import contextlib
 import functools
 import io
 import logging
 import os
+import random
 import re
 import signal
+import string
 import subprocess
 import sys
 import tempfile
 import threading
 
 import configargparse
-import daemon
+
+try:
+    # TODO: Not supported on Windows. Use daemoniker instead?
+    import daemon
+except ImportError:
+    daemon = None
 import pkg_resources
 
 from .. import device, formats, server, util
@@ -21,6 +29,9 @@ from . import client, protocol
 log = logging.getLogger(__name__)
 
 UNIX_SOCKET_TIMEOUT = 0.1
+SOCK_TYPE = 'Windows named pipe' if sys.platform == 'win32' else 'UNIX domain socket'
+SOCK_TYPE_PATH = 'Windows named pipe path' if sys.platform == 'win32' else 'UNIX socket path'
+FILE_PREFIX = 'file:'
 
 
 def ssh_args(conn):
@@ -90,27 +101,30 @@ def create_agent_parser(device_type):
     p.add_argument('--log-file', type=str,
                    help='Path to the log file (to be written by the agent).')
     p.add_argument('--sock-path', type=str,
-                   help='Path to the UNIX domain socket of the agent.')
+                   help='Path to the ' + SOCK_TYPE + ' of the agent.')
 
-    p.add_argument('--pin-entry-binary', type=str, default='pinentry',
+    p.add_argument('--pin-entry-binary', type=str, default=argparse.SUPPRESS,
                    help='Path to PIN entry UI helper.')
-    p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
+    p.add_argument('--passphrase-entry-binary', type=str, default=argparse.SUPPRESS,
                    help='Path to passphrase entry UI helper.')
-    p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
+    p.add_argument('--cache-expiry-seconds', type=float, default=argparse.SUPPRESS,
                    help='Expire passphrase from cache after this duration.')
 
     g = p.add_mutually_exclusive_group()
-    g.add_argument('-d', '--daemonize', default=False, action='store_true',
-                   help='Daemonize the agent and print its UNIX socket path')
+    if daemon:
+        g.add_argument('-d', '--daemonize', default=False, action='store_true',
+                       help='Daemonize the agent and print its ' + SOCK_TYPE_PATH)
     g.add_argument('-f', '--foreground', default=False, action='store_true',
-                   help='Run agent in foreground with specified UNIX socket path')
+                   help='Run agent in foreground with specified ' + SOCK_TYPE_PATH)
     g.add_argument('-s', '--shell', default=False, action='store_true',
                    help=('run ${SHELL} as subprocess under SSH agent, allowing '
                          'regular SSH-based tools to be used in the shell'))
     g.add_argument('-c', '--connect', default=False, action='store_true',
                    help='connect to specified host via SSH')
-    g.add_argument('--mosh', default=False, action='store_true',
-                   help='connect to specified host via using Mosh')
+    # Windows doesn't have native mosh
+    if sys.platform != 'win32':
+        g.add_argument('--mosh', default=False, action='store_true',
+                       help='connect to specified host via using Mosh')
 
     p.add_argument('identity', type=_to_unicode, default=None,
                    help='proto://[user@]host[:port][/path]')
@@ -159,7 +173,10 @@ def run_server(conn, command, sock_path, debug, timeout):
             if command:
                 ret = server.run_process(command=command, environ=env)
             else:
-                signal.pause()  # wait for signal (e.g. SIGINT)
+                try:
+                    signal.pause()  # wait for signal (e.g. SIGINT)
+                except AttributeError:
+                    sys.stdin.read()  # Windows doesn't support signal.pause
     except KeyboardInterrupt:
         log.info('server stopped')
     return ret
@@ -192,6 +209,34 @@ def import_public_keys(contents):
         yield line
 
 
+class ClosableNamedTemporaryFile():
+    """Creates a temporary file that is not deleted when the file is closed.
+
+    This allows the file to be opened with an exclusive lock, but used by other programs before
+    it is deleted
+    """
+
+    def __init__(self):
+        """Create a temporary file."""
+        self.file = tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w', delete=False)
+        self.name = self.file.name
+
+    def write(self, buf):
+        """Write `buf` to the file."""
+        self.file.write(buf)
+
+    def close(self):
+        """Closes the file, allowing it to be opened by other programs. Does not delete the file."""
+        self.file.close()
+
+    def __del__(self):
+        """Deletes the temporary file."""
+        try:
+            os.unlink(self.file.name)
+        except OSError:
+            log.warning("Failed to delete temporary file: %s", self.file.name)
+
+
 class JustInTimeConnection:
     """Connect to the device just before the needed operation."""
 
@@ -221,9 +266,9 @@ class JustInTimeConnection:
         """Store public keys as temporary SSH identity files."""
         if not self.public_keys_tempfiles:
             for pk in self.public_keys():
-                f = tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w')
+                f = ClosableNamedTemporaryFile()
                 f.write(pk)
-                f.flush()
+                f.close()
                 self.public_keys_tempfiles.append(f)
 
         return self.public_keys_tempfiles
@@ -241,13 +286,15 @@ def _dummy_context():
 
 def _get_sock_path(args):
     sock_path = args.sock_path
-    if not sock_path:
-        if args.foreground:
-            log.error('running in foreground mode requires specifying UNIX socket path')
-            sys.exit(1)
-        else:
-            sock_path = tempfile.mktemp(prefix='trezor-ssh-agent-')
-    return sock_path
+    if sock_path:
+        return sock_path
+    elif args.foreground:
+        log.error('running in foreground mode requires specifying %s', SOCK_TYPE_PATH)
+        sys.exit(1)
+    elif sys.platform == 'win32':
+        return '\\\\.\\pipe\\trezor-ssh-agent-' + os.urandom(10).hex()
+    else:
+        return tempfile.mktemp(prefix='trezor-ssh-agent-')
 
 
 @handle_connection_error
@@ -258,8 +305,10 @@ def main(device_type):
 
     public_keys = None
     filename = None
-    if args.identity.startswith('/'):
-        filename = args.identity
+    if args.identity.startswith('/') or args.identity.startswith(FILE_PREFIX):
+        filename = (args.identity[len(FILE_PREFIX):]
+                    if args.identity.startswith(FILE_PREFIX)
+                    else args.identity)
         contents = open(filename, 'rb').read().decode('utf-8')
         # Allow loading previously exported SSH public keys
         if filename.endswith('.pub'):
@@ -284,9 +333,9 @@ def main(device_type):
     context = _dummy_context()
     if args.connect:
         command = ['ssh'] + ssh_args(conn) + args.command
-    elif args.mosh:
+    elif sys.platform != 'win32' and args.mosh:
         command = ['mosh'] + mosh_args(conn) + args.command
-    elif args.daemonize:
+    elif daemon and args.daemonize:
         out = 'SSH_AUTH_SOCK={0}; export SSH_AUTH_SOCK;\n'.format(sock_path)
         sys.stdout.write(out)
         sys.stdout.flush()
@@ -300,7 +349,7 @@ def main(device_type):
         command = os.environ['SHELL']
         sys.stdin.close()
 
-    if command or args.daemonize or args.foreground:
+    if command or (daemon and args.daemonize) or args.foreground:
         with context:
             return run_server(conn=conn, command=command, sock_path=sock_path,
                               debug=args.debug, timeout=args.timeout)

@@ -31,8 +31,9 @@ setup(
         'pymsgbox>=1.0.6',
         'semver>=2.2',
         'unidecode>=0.4.20',
+        'pywin32>=300;sys_platform=="win32"'
     ],
-    platforms=['POSIX'],
+    platforms=['POSIX', 'win32'],
     classifiers=[
         'Environment :: Console',
         'Development Status :: 5 - Production/Stable',
@@ -41,6 +42,7 @@ setup(
         'Intended Audience :: System Administrators',
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
         'Operating System :: POSIX',
+        'Operating System :: Microsoft :: Windows',
         'Programming Language :: Python :: 3 :: Only',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Networking',
