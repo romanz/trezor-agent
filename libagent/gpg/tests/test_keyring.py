@@ -1,4 +1,5 @@
 import io
+import subprocess
 
 import mock
 
@@ -91,16 +92,11 @@ def test_iterlines():
 
 
 def test_get_agent_sock_path():
-    sp = mock_subprocess(b'''sysconfdir:/usr/local/etc/gnupg
-bindir:/usr/local/bin
-libexecdir:/usr/local/libexec
-libdir:/usr/local/lib/gnupg
-datadir:/usr/local/share/gnupg
-localedir:/usr/local/share/locale
-dirmngr-socket:/run/user/1000/gnupg/S.dirmngr
-agent-ssh-socket:/run/user/1000/gnupg/S.gpg-agent.ssh
-agent-socket:/run/user/1000/gnupg/S.gpg-agent
-homedir:/home/roman/.gnupg
-''')
-    expected = b'/run/user/1000/gnupg/S.gpg-agent'
-    assert keyring.get_agent_sock_path(sp=sp) == expected
+    expected_prefix = b'/run/user/'
+    expected_suffix = b'/gnupg/S.gpg-agent'
+    expected_infix = b'0123456789'
+    value = keyring.get_agent_sock_path(sp=subprocess)
+    assert value.startswith(expected_prefix)
+    assert value.endswith(expected_suffix)
+    value = value[len(expected_prefix):-len(expected_suffix)]
+    assert value.strip(expected_infix) == b''

@@ -222,12 +222,13 @@ class PublicKey:
         """Data for digest computation."""
         return b'\x99' + util.prefix_len('>H', self.data())
 
-    def _fingerprint(self):
+    def fingerprint(self):
+        """GPG key fingerprint as bytes."""
         return hashlib.sha1(self.data_to_hash()).digest()
 
     def key_id(self):
         """Short (8 byte) GPG key ID."""
-        return self._fingerprint()[-8:]
+        return self.fingerprint()[-8:]
 
     def __repr__(self):
         """Short (8 hexadecimal digits) GPG key ID."""

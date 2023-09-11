@@ -8,8 +8,13 @@ import os
 import re
 import socket
 import subprocess
+import sys
+import urllib.parse
 
 from .. import util
+
+if sys.platform == 'win32':
+    from .. import win_server
 
 log = logging.getLogger(__name__)
 
@@ -27,12 +32,8 @@ def check_output(args, env=None, sp=subprocess):
 
 def get_agent_sock_path(env=None, sp=subprocess):
     """Parse gpgconf output to find out GPG agent UNIX socket path."""
-    args = [util.which('gpgconf'), '--list-dirs']
-    output = check_output(args=args, env=env, sp=sp)
-    lines = output.strip().split(b'\n')
-    dirs = dict(line.split(b':', 1) for line in lines)
-    log.debug('%s: %s', args, dirs)
-    return dirs[b'agent-socket']
+    args = [util.which('gpgconf'), '--list-dirs', 'agent-socket']
+    return check_output(args=args, env=env, sp=sp).strip()
 
 
 def connect_to_agent(env=None, sp=subprocess):
@@ -40,8 +41,11 @@ def connect_to_agent(env=None, sp=subprocess):
     sock_path = get_agent_sock_path(sp=sp, env=env)
     # Make sure the original gpg-agent is running.
     check_output(args=['gpg-connect-agent', '/bye'], sp=sp)
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(sock_path)
+    if sys.platform == 'win32':
+        sock = win_server.Client(sock_path)
+    else:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(sock_path)
     return sock
 
 
@@ -193,7 +197,8 @@ def get_gnupg_components(sp=subprocess):
     """Parse GnuPG components' paths."""
     args = [util.which('gpgconf'), '--list-components']
     output = check_output(args=args, sp=sp)
-    components = dict(re.findall('(.*):.*:(.*)', output.decode('utf-8')))
+    components = {k: urllib.parse.unquote(v) for k, v in re.findall(
+                  r'(?<!:)([^\n\r:]*):[^\n\r:]*:([^\n\r:]*)(?!:)', output.decode('utf-8'))}
     log.debug('gpgconf --list-components: %s', components)
     return components
 
@@ -204,6 +209,15 @@ def get_gnupg_binary(sp=subprocess, neopg_binary=None):
     if neopg_binary:
         return neopg_binary
     return get_gnupg_components(sp=sp)['gpg']
+
+
+@util.memoize
+def get_pinentry_binary(sp=subprocess):
+    """Returns the exact path to `pinentry` if GPG is installed."""
+    try:
+        return get_gnupg_components(sp=sp)['pinentry']
+    except Exception:  # pylint: disable=broad-except
+        return 'pinentry'
 
 
 def gpg_command(args, env=None):
@@ -225,10 +239,10 @@ def gpg_version(sp=subprocess):
     """Get a keygrip of the primary GPG key of the specified user."""
     args = gpg_command(['--version'])
     output = check_output(args=args, sp=sp)
-    line = output.split(b'\n', maxsplit=1)[0]  # b'gpg (GnuPG) 2.1.11'
-    line = line.split(b' ')[-1]  # b'2.1.11'
-    line = line.split(b'-')[0]  # remove trailing version parts
-    return line.split(b'v')[-1]  # remove 'v' prefix
+    line = re.split('[\n\r]+', output.decode('utf-8'))[0]  # b'gpg (GnuPG) 2.1.11'
+    line = line.split(' ')[-1]  # b'2.1.11'
+    line = line.split('-')[0]  # remove trailing version parts
+    return line.split('v')[-1].encode()  # remove 'v' prefix
 
 
 def export_public_key(user_id, env=None, sp=subprocess):
