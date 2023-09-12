@@ -3,7 +3,7 @@ import binascii
 import logging
 
 from .. import util
-from . import client, decode, keyring, protocol
+from . import client, keyring, keystore
 
 log = logging.getLogger(__name__)
 
@@ -36,17 +36,6 @@ def parse_ecdh(line):
     return dict(items)[b'e']
 
 
-async def _key_info(conn, keygrip, *_):
-    """
-    Dummy reply (mainly for 'gpg --edit' to succeed).
-
-    For details, see GnuPG agent KEYINFO command help.
-    https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
-    """
-    fmt = 'S KEYINFO {0} X - - - - - - -'
-    await keyring.sendline(conn, fmt.format(keygrip).encode('ascii'))
-
-
 class AgentError(Exception):
     """GnuPG agent-related error."""
 
@@ -62,7 +51,7 @@ class Handler:
     def _get_options(self):
         return self.options
 
-    def __init__(self, ui, pubkey_bytes):
+    def __init__(self, ui, homedir):
         """C-tor."""
         self.keygrip = None
         self.digest = None
@@ -70,8 +59,7 @@ class Handler:
         self.options = []
         self.ui = ui
         self.client = client.Client(ui=ui, options_getter=self._get_options)
-        # Cache public keys from GnuPG
-        self.pubkey_bytes = pubkey_bytes
+        self.homedir = homedir
 
         self.handlers = {
             b'RESET': self.reset,
@@ -86,7 +74,8 @@ class Handler:
             b'PKSIGN': self.pksign,
             b'PKDECRYPT': self.pkdecrypt,
             b'HAVEKEY': self.have_key,
-            b'KEYINFO': _key_info,
+            b'DELETE_KEY': self.delete_key,
+            b'KEYINFO': self.key_info,
             b'SCD': self.handle_scd,
             b'GET_PASSPHRASE': self.handle_get_passphrase,
         }
@@ -146,34 +135,19 @@ class Handler:
             raise AgentError(b'ERR 100696144 No such device <SCD>')
         await keyring.sendline(conn, b'D ' + reply)
 
-    @util.memoize_method  # global cache for key grips
     async def get_identity(self, keygrip):
         """
         Returns device.interface.Identity that matches specified keygrip.
 
         In case of missing keygrip, KeyError will be raised.
         """
-        keygrip_bytes = binascii.unhexlify(keygrip)
-        pubkey_dict, user_ids = decode.load_by_keygrip(
-            pubkey_bytes=self.pubkey_bytes, keygrip=keygrip_bytes)
-        # We assume the first user ID is used to generate TREZOR-based GPG keys.
-        user_id = user_ids[0]['value'].decode('utf-8')
-        curve_name = protocol.get_curve_name_by_oid(pubkey_dict['curve_oid'])
-        ecdh = pubkey_dict['algo'] == protocol.ECDH_ALGO_ID
-
-        identity = client.create_identity(user_id=user_id, curve_name=curve_name)
-        verifying_key = await self.client.pubkey(identity=identity, ecdh=ecdh)
-        pubkey = protocol.PublicKey(
-            curve_name=curve_name, created=pubkey_dict['created'],
-            verifying_key=verifying_key, ecdh=ecdh)
-        assert pubkey.key_id() == pubkey_dict['key_id']
-        assert pubkey.keygrip() == keygrip_bytes
-        return identity
+        key = await keystore.load_key(self.client, binascii.unhexlify(keygrip), self.homedir)
+        return key['identity']
 
     async def pksign(self, conn, *_):
         """Sign a message digest using a private EC key."""
         log.debug('signing %r digest (algo #%s)', self.digest, self.algo)
-        identity = await self.get_identity(keygrip=self.keygrip)
+        identity = await self.get_identity(self.keygrip)
         r, s = await self.client.sign(identity=identity,
                                       digest=binascii.unhexlify(self.digest))
         result = sig_encode(r, s)
@@ -189,16 +163,14 @@ class Handler:
         assert await keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)
 
-        identity = await self.get_identity(keygrip=self.keygrip)
+        identity = await self.get_identity(self.keygrip)
         ec_point = await self.client.ecdh(identity=identity, pubkey=remote_pubkey)
         await keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
 
     async def have_key(self, conn, *keygrips):
         """Check if any keygrip corresponds to a TREZOR-based key."""
         if len(keygrips) == 1 and keygrips[0].startswith(b"--list="):
-            # Support "fast-path" key listing:
-            # https://dev.gnupg.org/rG40da61b89b62dcb77847dc79eb159e885f52f817
-            keygrips = list(decode.iter_keygrips(pubkey_bytes=self.pubkey_bytes))
+            keygrips = await keystore.list_keys(self.client, self.homedir)
             log.debug('keygrips: %r', keygrips)
             await keyring.sendline(conn, b'D ' + util.assuan_serialize(b''.join(keygrips)))
             return
@@ -211,6 +183,30 @@ class Handler:
                 log.warning('HAVEKEY(%s) failed: %s', keygrip, e)
         else:
             raise AgentError(b'ERR 67108881 No secret key <GPG Agent>')
+
+    async def delete_key(self, _, *keygrips):
+        """Remove the specified keys from the key database."""
+        for keygrip in keygrips:
+            try:
+                if keygrip in ('--force', '--stub'):
+                    continue
+                await keystore.delete_key(binascii.unhexlify(keygrip), self.homedir)
+            except IOError as e:
+                log.warning('DELETE_KEY(%s) failed: %s', keygrip, e)
+
+    async def key_info(self, conn, keygrip, *_):
+        """
+        Dummy reply (mainly for 'gpg --edit' to succeed).
+
+        For details, see GnuPG agent KEYINFO command help.
+        https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
+        """
+        try:
+            await self.get_identity(keygrip=keygrip)
+        except KeyError as e:
+            raise AgentError(b'ERR 67108891 Not found <GPG Agent>') from e
+        fmt = 'S KEYINFO {0} X - - - - - - -'
+        await keyring.sendline(conn, fmt.format(keygrip.decode('ascii')).encode('ascii'))
 
     async def set_key(self, _conn, keygrip, *_):
         """Set hexadecimal keygrip for next operation."""

@@ -1,4 +1,4 @@
-"""UNIX-domain socket server for ssh-agent implementation."""
+"""UNIX-domain socket server and related utility functions."""
 import contextlib
 import functools
 import logging

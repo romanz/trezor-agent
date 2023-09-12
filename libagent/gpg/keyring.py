@@ -39,8 +39,8 @@ async def get_agent_sock_path(env=None, run_process=trio.run_process):
 async def connect_to_agent(env=None, run_process=trio.run_process):
     """Connect to GPG agent's UNIX socket."""
     sock_path = get_agent_sock_path(run_process=run_process, env=env)
-    # Make sure the original gpg-agent is running.
-    await check_output(args=['gpg-connect-agent', '/bye'], run_process=run_process)
+    # This forces the gpg-agent configured for this environment to run.
+    await check_output(args=gpg_command(['--list-secret-keys']), run_process=run_process, env=env)
     if sys.platform == 'win32':
         sock = await win_server.Client.open(sock_path)
     else:
@@ -228,13 +228,6 @@ async def gpg_command(args, env=None):
     return [cmd] + args
 
 
-async def get_keygrip(user_id, run_process=trio.run_process):
-    """Get a keygrip of the primary GPG key of the specified user."""
-    args = await gpg_command(['--list-keys', '--with-keygrip', user_id])
-    output = await check_output(args=args, run_process=run_process).decode('utf-8')
-    return re.findall(r'Keygrip = (\w+)', output)[0]
-
-
 async def gpg_version(run_process=trio.run_process):
     """Get a keygrip of the primary GPG key of the specified user."""
     args = await gpg_command(['--version'])
@@ -247,7 +240,7 @@ async def gpg_version(run_process=trio.run_process):
 
 async def export_public_key(user_id, env=None, run_process=trio.run_process):
     """Export GPG public key for specified `user_id`."""
-    args = await gpg_command(['--export', user_id])
+    args = await gpg_command(['--export', '--export-filter', 'select=uid=' + user_id])
     result = await check_output(args=args, env=env, run_process=run_process)
     if not result:
         log.error('could not find public key %r in local GPG keyring', user_id)
@@ -264,10 +257,15 @@ async def export_public_keys(env=None, run_process=trio.run_process):
     return result
 
 
-async def create_agent_signer(user_id):
+async def delete_public_key(key_id, env=None, run_process=trio.run_process):
+    """Export all GPG public keys."""
+    args = await gpg_command(['--delete-keys', '--expert', '--batch', '--yes', key_id])
+    await check_output(args=args, env=env, run_process=run_process)
+
+
+async def create_agent_signer(keygrip, env):
     """Sign digest with existing GPG keys using gpg-agent tool."""
-    sock = await connect_to_agent(env=os.environ)
-    keygrip = await get_keygrip(user_id)
+    sock = await connect_to_agent(env=env)
 
     async def sign(digest):
         """Sign the digest and return an ECDSA/RSA/DSA signature."""

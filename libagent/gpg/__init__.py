@@ -28,65 +28,92 @@ import pkg_resources
 import semver
 
 from .. import device, formats, server, util
-from . import agent, client, encode, keyring, protocol
+from . import agent, client, decode, encode, keyring, keystore, protocol
 
 log = logging.getLogger(__name__)
 
 
-async def export_public_key(device_type, args):
+async def export_public_key(device_type, homedir, args):
     """Generate a new pubkey for a new/existing GPG identity."""
+    # pylint: disable=too-many-branches
     log.warning('NOTE: in order to re-generate the exact same GPG key later, '
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
     async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
         c = client.Client(ui=ui)
-        identity = client.create_identity(user_id=args.user_id,
-                                          curve_name=args.ecdsa_curve)
-        verifying_key = await c.pubkey(identity=identity, ecdh=False)
-        decryption_key = await c.pubkey(identity=identity, ecdh=True)
-        signer_func = functools.partial(c.sign, identity=identity)
+        if args.derivation_path:
+            user_id = args.derivation_path
+        else:
+            user_id = args.user_id
         fingerprints = []
 
+        result = None
         if args.subkey:  # add as subkey
-            log.info('adding %s GPG subkey for "%s" to existing key',
-                     args.ecdsa_curve, args.user_id)
-            # subkey for signing
-            signing_key = protocol.PublicKey(
-                curve_name=args.ecdsa_curve, created=args.time,
-                verifying_key=verifying_key, ecdh=False)
-            fingerprints.append(util.hexlify(signing_key.fingerprint()))
-            # subkey for encryption
-            encryption_key = protocol.PublicKey(
-                curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-                created=args.time, verifying_key=decryption_key, ecdh=True)
-            fingerprints.append(util.hexlify(encryption_key.fingerprint()))
-            primary_bytes = await keyring.export_public_key(args.user_id)
-            result = await encode.create_subkey(primary_bytes=primary_bytes,
-                                                subkey=signing_key,
-                                                signer_func=signer_func)
-            result = await encode.create_subkey(primary_bytes=result,
-                                                subkey=encryption_key,
-                                                signer_func=signer_func)
-        else:  # add as primary
-            log.info('creating new %s GPG primary key for "%s"',
-                     args.ecdsa_curve, args.user_id)
-            # primary key for signing
-            primary = protocol.PublicKey(
-                curve_name=args.ecdsa_curve, created=args.time,
-                verifying_key=verifying_key, ecdh=False)
-            fingerprints.append(util.hexlify(primary.fingerprint()))
-            # subkey for encryption
-            subkey = protocol.PublicKey(
-                curve_name=formats.get_ecdh_curve_name(args.ecdsa_curve),
-                created=args.time, verifying_key=decryption_key, ecdh=True)
-            fingerprints.append(util.hexlify(subkey.fingerprint()))
+            sign_identity = None
+            try:
+                if args.primary_homedir is None:
+                    result = await keyring.export_public_key(args.user_id)
+                    # Check if the key was generated with this device
+                    sign_identity = await decode.identity_for_key(c, result,
+                                                                  os.environ['GNUPGHOME'])
+                else:
+                    result = await keyring.export_public_key(args.user_id,
+                                                             env={'GNUPGHOME':
+                                                                  args.primary_homedir})
+                    # Check if the key was generated with this device
+                    sign_identity = await decode.identity_for_key(c, result, args.primary_homedir)
+                if sign_identity is None:
+                    if args.primary_homedir is None:
+                        signer_func = await keyring.create_agent_signer(
+                            next(decode.iter_keygrips(result)),
+                            env=os.environ)
+                    else:
+                        signer_func = await keyring.create_agent_signer(
+                            next(decode.iter_keygrips(result)),
+                            env={'GNUPGHOME': args.primary_homedir})
+                else:
+                    signer_func = functools.partial(c.sign, identity=sign_identity)
+            except Exception:  # pylint: disable=broad-except
+                log.warning('Could not find a primary key matching the specified user id. '
+                            'Creating a new primary key instead of a subkey')
 
-            result = await encode.create_primary(user_id=args.user_id,
-                                                 pubkey=primary,
-                                                 signer_func=signer_func)
+        if result is None:
+            identity = client.create_identity(user_id=user_id,
+                                              curve_name=args.ecdsa_curve_name)
+            # No external
+            signer_func = functools.partial(c.sign, identity=identity)
+
+        if result is None or not args.no_sign:  # Signing or certification key
+            pubkey = await keystore.store_key(c, user_id, args.ecdsa_curve_name,
+                                              False, args.time, homedir)
+            fingerprints.append(util.hexlify(pubkey.fingerprint()))
+            if result is None:
+                result = await encode.create_primary(user_id=args.user_id,
+                                                     pubkey=pubkey,
+                                                     signer_func=signer_func,
+                                                     flags=1 if args.no_sign else 3)
+            else:
+                result = await encode.create_subkey(primary_bytes=result,
+                                                    subkey=pubkey,
+                                                    signer_func=signer_func,
+                                                    flags=2)
+
+        if args.encrypt != 'none':  # Encryption key
+            if args.encrypt == 'communications':
+                flags = 4
+            elif args.encrypt == 'storage':
+                flags = 8
+            else:
+                flags = 12
+            pubkey = await keystore.store_key(c, user_id,
+                                              formats.get_ecdh_curve_name(args.ecdsa_curve_name),
+                                              True, args.time, homedir)
+            fingerprints.append(util.hexlify(pubkey.fingerprint()))
+            assert result is not None
             result = await encode.create_subkey(primary_bytes=result,
-                                                subkey=subkey,
-                                                signer_func=signer_func)
+                                                subkey=pubkey,
+                                                signer_func=signer_func,
+                                                flags=flags)
 
         return (fingerprints, protocol.armor(result, 'PUBLIC KEY BLOCK'))
 
@@ -130,9 +157,6 @@ async def run_init(device_type, args):
                   'remove it manually if required', homedir)
         sys.exit(1)
 
-    # Prepare the key before making any changes
-    fingerprints, public_key_bytes = await export_public_key(device_type, args)
-
     await trio.Path(homedir).mkdir(mode=0o700, parents=True, exist_ok=True)
 
     agent_path = await util.which('{}-gpg-agent'.format(device_name))
@@ -163,11 +187,12 @@ set PATH={0}
 
     # Prepare GPG configuration file
     async with await trio.open_file(os.path.join(homedir, 'gpg.conf'), 'w') as f:
+        # Do not bother escaping or quoting config parameters.
+        # _gpgrt_argparse simply reads until EOL.
         await f.write("""# Hardware-based GPG configuration
-agent-program "{0}"
+agent-program {0}
 personal-digest-preferences SHA512
-default-key {1}
-""".format(util.escape_cmd_quotes(run_agent_script), fingerprints[0]))
+""".format(run_agent_script))
 
     # Prepare a helper script for setting up the new identity
     async with await trio.open_file(os.path.join(homedir, 'env'), 'w') as f:
@@ -184,6 +209,37 @@ fi
 """.format(homedir))
     await trio.Path(f.name).chmod(0o700)
 
+
+async def run_add(device_type, args):
+    """Initialize hardware-based GnuPG identity."""
+    util.setup_logging(verbosity=args.verbose)
+    log.warning('This GPG tool is still in EXPERIMENTAL mode, '
+                'so please note that the API and features may '
+                'change without backwards compatibility!')
+
+    await verify_gpg_version()
+
+    # Add a new hardware-based identity to the GPG home directory
+    device_name = device_type.package_name().rsplit('-', 1)[0]
+    log.info('device name: %s', device_name)
+    homedir = args.homedir
+    if not homedir:
+        homedir = os.path.expanduser('~/.gnupg/{}'.format(device_name))
+
+    log.info('GPG home directory: %s', homedir)
+
+    if not os.path.exists(homedir):
+        log.error('GPG home directory %s is missing, '
+                  'use %s-gpg init first', homedir, device_name)
+        sys.exit(1)
+
+    # Prepare the keys
+    fingerprints, public_key_bytes = await export_public_key(device_type, homedir, args)
+
+    if not fingerprints:
+        log.warning('No keys created')
+        sys.exit(1)
+
     # Generate new GPG identity and import into GPG keyring
     verbosity = ('-' + ('v' * args.verbose)) if args.verbose else '--quiet'
     await check_call(await keyring.gpg_command(['--homedir', homedir, verbosity,
@@ -195,9 +251,11 @@ fi
                                                 '--import-ownertrust']),
                      input_bytes=(fingerprints[0] + ':6\n').encode())
 
-    # Load agent and make sure it responds with the new identity
-    await check_call(await keyring.gpg_command(['--homedir', homedir,
-                                                '--list-secret-keys', args.user_id]))
+    if args.default:
+        # Make new key the default key
+        await check_call([await util.which('gpgconf'), '--homedir', homedir,
+                          '--change-options', 'gpg'],
+                         input_bytes=('default-key:0:"' + fingerprints[0]).encode())
 
 
 async def run_unlock(device_type, args):
@@ -226,18 +284,16 @@ def run_agent(device_type):
     p = argparse.ArgumentParser()
     p.add_argument('--homedir', default=os.environ.get('GNUPGHOME'))
     p.add_argument('-v', '--verbose', default=0, action='count')
-    p.add_argument('--server', default=False, action='store_true',
-                   help='Use stdin/stdout for communication with GPG.')
     if daemon:
         p.add_argument('--daemon', default=False, action='store_true',
-                       help='Daemonize the agent.')
+                       help='daemonize the agent')
 
     p.add_argument('--pin-entry-binary', type=str, default=argparse.SUPPRESS,
-                   help='Path to PIN entry UI helper.')
+                   help='path to PIN entry UI helper')
     p.add_argument('--passphrase-entry-binary', type=str, default=argparse.SUPPRESS,
-                   help='Path to passphrase entry UI helper.')
+                   help='path to passphrase entry UI helper')
     p.add_argument('--cache-expiry-seconds', type=float, default=argparse.SUPPRESS,
-                   help='Expire passphrase from cache after this duration.')
+                   help='expire passphrase from cache after this duration')
 
     args, _ = p.parse_known_args()
 
@@ -248,10 +304,10 @@ def run_agent(device_type):
         trio.run(run_agent_internal, args, device_type)
 
 
-async def handle_connection(conn, ui, pubkey_bytes, quit_event):
+async def handle_connection(conn, ui, homedir, quit_event):
     """Handle a single connection to the agent."""
     try:
-        await agent.Handler(ui=ui, pubkey_bytes=pubkey_bytes).handle(conn)
+        await agent.Handler(ui=ui, homedir=homedir).handle(conn)
     except agent.AgentStop:
         log.info('stopping gpg-agent')
         quit_event.set()
@@ -275,7 +331,6 @@ async def run_agent_internal(args, device_type):
     log.debug('pid: %d, parent pid: %d', os.getpid(), os.getppid())
     try:
         env = {'GNUPGHOME': args.homedir, 'PATH': os.environ['PATH']}
-        pubkey_bytes = await keyring.export_public_keys(env=env)
         async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
             sock_server = await _server_from_assuan_fd(os.environ)
             if sock_server is None:
@@ -285,7 +340,7 @@ async def run_agent_internal(args, device_type):
                 quit_event = trio.Event()
                 handle_conn = functools.partial(handle_connection,
                                                 ui=ui,
-                                                pubkey_bytes=pubkey_bytes,
+                                                homedir=args.homedir,
                                                 quit_event=quit_event)
                 try:
                     await server.server_thread(sock, handle_conn, quit_event)
@@ -314,24 +369,52 @@ def main(device_type):
     subparsers.required = True
 
     p = subparsers.add_parser('init',
-                              help='initialize hardware-based GnuPG identity')
-    p.add_argument('user_id')
-    p.add_argument('-e', '--ecdsa-curve', default='nist256p1')
-    p.add_argument('-t', '--time', type=int, default=0)
+                              help='initialize a hardware-based GnuPG home directory')
     p.add_argument('-v', '--verbose', default=0, action='count')
-    p.add_argument('-s', '--subkey', default=False, action='store_true')
 
     p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
-                   help='Customize GnuPG home directory for the new identity.')
+                   help='GnuPG home directory to create')
 
     p.add_argument('--pin-entry-binary', type=str, default=argparse.SUPPRESS,
-                   help='Path to PIN entry UI helper.')
+                   help='path to PIN entry UI helper')
     p.add_argument('--passphrase-entry-binary', type=str, default=argparse.SUPPRESS,
-                   help='Path to passphrase entry UI helper.')
+                   help='path to passphrase entry UI helper')
     p.add_argument('--cache-expiry-seconds', type=float, default=argparse.SUPPRESS,
-                   help='Expire passphrase from cache after this duration.')
+                   help='expire passphrase from cache after this duration')
 
     p.set_defaults(func=run_init)
+
+    p = subparsers.add_parser('add',
+                              help='add a hardware-based GnuPG identity or subkey to the profile')
+    p.add_argument('user_id')
+    p.add_argument('-e', '--ecdsa-curve-name', default='nist256p1',
+                   choices=sorted(formats.SUPPORTED_CURVES),
+                   help='specify curve name')
+    p.add_argument('-t', '--time', type=int, default=0,
+                   help='set key creation time. This will modify the key\'s fingerprint, '
+                        'but not the associated private key')
+    p.add_argument('-v', '--verbose', default=0, action='count')
+    p.add_argument('-d', '--default', default=False, action='store_true',
+                   help='sets the newly created key as the default key for the profile')
+    p.add_argument('--derivation-path', default=None,
+                   help='custom derivation path for the key. If not specified, '
+                        'the user id is used')
+    p.add_argument('-s', '--subkey', default=False, action='store_true',
+                   help='create a subkey instead of a primary key')
+    p.add_argument('--primary-homedir', default=None,
+                   help='home directory in which the primary is stored, if creating a subkey. '
+                        'Useful for keeping subkey and primary in separate profiles')
+    p.add_argument('--no-sign', default=False, action='store_true',
+                   help='do not create a signing key. '
+                        'If creating a primary key, it will be set to certify-only')
+    p.add_argument('--encrypt', default='any', choices=['none', 'any', 'communications', 'storage'],
+                   help='select allowed encryption usage for the key. '
+                        'If set to none, an encryption key will not be created')
+
+    p.add_argument('--homedir', type=str, default=os.environ.get('GNUPGHOME'),
+                   help='customize GnuPG home directory for the new identity')
+
+    p.set_defaults(func=run_add)
 
     p = subparsers.add_parser('unlock', help='unlock the hardware device')
     p.add_argument('-v', '--verbose', default=0, action='count')
