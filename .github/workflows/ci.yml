@@ -2,6 +2,10 @@ name: Build
 
 on: [push, pull_request]
 
+concurrency:
+  group: ci-${{github.actor}}-${{github.head_ref || github.run_number}}-${{github.ref}}
+  cancel-in-progress: true
+
 jobs:
   build:
 
