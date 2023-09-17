@@ -105,9 +105,10 @@ class Identity:
 class Device:
     """Abstract cryptographic hardware device interface."""
 
-    def __init__(self):
+    def __init__(self, args):
         """C-tor."""
         self.conn = None
+        self.args = args
 
     def connect(self):
         """Connect to device, otherwise raise NotFoundError."""
@@ -142,9 +143,21 @@ class Device:
         """Sign given blob and return the signature (as bytes)."""
         raise NotImplementedError()
 
+    def sign_with_pubkey(self, identity, blob):
+        """Sign given blob and return the signature (as bytes)."""
+        return (self.sign(identity, blob),
+                formats.compress_pubkey(self.pubkey(identity, ecdh=False),
+                                        identity.get_curve_name(False)))
+
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         raise NotImplementedError()
+
+    def ecdh_with_pubkey(self, identity, pubkey):
+        """Get shared session key using Elliptic Curve Diffie-Hellman."""
+        return (self.ecdh(identity, pubkey),
+                formats.compress_pubkey(self.pubkey(identity, ecdh=True),
+                                        identity.get_curve_name(True))[1:])
 
     def __str__(self):
         """Human-readable representation."""

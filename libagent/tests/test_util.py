@@ -125,22 +125,23 @@ def test_assuan_serialize():
 
 def test_cache():
     timer = mock.Mock(side_effect=range(7))
-    c = util.ExpiringCache(seconds=2, timer=timer)  # t=0
-    assert c.get() is None                          # t=1
+    c = util.ExpiringCache(seconds=2, timer=timer)
+    c.set('not_the_key', 'unused')                  # t=0
+    assert c.get('key') is None                     # t=1
     obj = 'foo'
-    c.set(obj)                                      # t=2
-    assert c.get() is obj                           # t=3
-    assert c.get() is obj                           # t=4
-    assert c.get() is None                          # t=5
-    assert c.get() is None                          # t=6
+    c.set('key', obj)                               # t=2
+    assert c.get('key') is obj                      # t=3
+    assert c.get('key') is obj                      # t=4
+    assert c.get('key') is None                     # t=5
+    assert c.get('key') is None                     # t=6
 
 
 def test_cache_inf():
     timer = mock.Mock(side_effect=range(6))
     c = util.ExpiringCache(seconds=float('inf'), timer=timer)
     obj = 'foo'
-    c.set(obj)
-    assert c.get() is obj
-    assert c.get() is obj
-    assert c.get() is obj
-    assert c.get() is obj
+    c.set('key', obj)
+    assert c.get('key') is obj
+    assert c.get('key') is obj
+    assert c.get('key') is obj
+    assert c.get('key') is obj

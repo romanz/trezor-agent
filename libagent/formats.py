@@ -185,6 +185,30 @@ def decompress_pubkey(pubkey, curve_name):
     return vk
 
 
+def compress_pubkey(pubkey, curve_name):
+    """
+    Transform a public key into a serialized blob.
+
+    Reverse of decompress_pubkey.
+    """
+    if isinstance(pubkey, nacl.signing.VerifyKey):
+        compressed = pubkey.encode(encoder=nacl.encoding.RawEncoder)
+        if len(compressed) == 32:
+            if curve_name == ECDH_CURVE25519:
+                compressed = b'\x40' + compressed
+            else:
+                compressed = b'\x00' + compressed
+        return compressed
+
+    if isinstance(pubkey, ecdsa.keys.VerifyingKey):
+        return pubkey.to_string('compressed')
+
+    if isinstance(pubkey, (bytes, bytearray)):
+        return pubkey
+
+    raise TypeError('unsupported {!r}'.format(pubkey))
+
+
 def serialize_verifying_key(vk):
     """
     Serialize a public key into SSH format (for exporting to text format).
