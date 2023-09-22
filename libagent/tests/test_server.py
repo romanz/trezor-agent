@@ -1,135 +1,147 @@
+import functools
 import io
 import os
-import socket
 import tempfile
-import threading
 
-import mock
 import pytest
+import trio
 
 from .. import server, util
 from ..ssh import protocol
 
 
-def test_socket():
+@pytest.mark.trio
+async def test_socket():
     path = tempfile.mktemp()
-    with server.unix_domain_socket_server(path):
+    async with server.unix_domain_socket_server(path):
         pass
     assert not os.path.isfile(path)
 
 
 class FakeSocket:
 
-    def __init__(self, data=b''):
+    def __init__(self, data=b'', recv_raises=None):
         self.rx = io.BytesIO(data)
         self.tx = io.BytesIO()
+        self.recv_raises = recv_raises
 
-    def sendall(self, data):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    async def send(self, data):
         self.tx.write(data)
+        return len(data)
 
-    def recv(self, size):
+    async def recv(self, size):
+        if self.recv_raises:
+            toraise = self.recv_raises[0]
+            self.recv_raises = self.recv_raises[1:]
+            raise toraise
         return self.rx.read(size)
 
     def close(self):
         pass
 
-    def settimeout(self, value):
-        pass
+
+# pylint: disable=too-few-public-methods
+class EmptyDevice:
+    async def parse_public_keys(self):
+        return []
 
 
-def empty_device():
-    c = mock.Mock(spec=['parse_public_keys'])
-    c.parse_public_keys.return_value = []
-    return c
-
-
-def test_handle():
-    mutex = threading.Lock()
-
-    handler = protocol.Handler(conn=empty_device())
+@pytest.mark.trio
+async def test_handle():
+    handler = protocol.Handler(conn=EmptyDevice())
     conn = FakeSocket()
-    server.handle_connection(conn, handler, mutex)
+    await server.handle_connection(conn, handler)
 
     msg = bytearray([protocol.msg_code('SSH_AGENTC_REQUEST_RSA_IDENTITIES')])
     conn = FakeSocket(util.frame(msg))
-    server.handle_connection(conn, handler, mutex)
+    await server.handle_connection(conn, handler)
     assert conn.tx.getvalue() == b'\x00\x00\x00\x05\x02\x00\x00\x00\x00'
 
     msg = bytearray([protocol.msg_code('SSH2_AGENTC_REQUEST_IDENTITIES')])
     conn = FakeSocket(util.frame(msg))
-    server.handle_connection(conn, handler, mutex)
+    await server.handle_connection(conn, handler)
     assert conn.tx.getvalue() == b'\x00\x00\x00\x05\x0C\x00\x00\x00\x00'
 
     msg = bytearray([protocol.msg_code('SSH2_AGENTC_ADD_IDENTITY')])
     conn = FakeSocket(util.frame(msg))
-    server.handle_connection(conn, handler, mutex)
+    await server.handle_connection(conn, handler)
     conn.tx.seek(0)
     reply = util.read_frame(conn.tx)
     assert reply == util.pack('B', protocol.msg_code('SSH_AGENT_FAILURE'))
 
-    conn_mock = mock.Mock(spec=FakeSocket)
-    conn_mock.recv.side_effect = [Exception, EOFError]
-    server.handle_connection(conn=conn_mock, handler=None, mutex=mutex)
+    conn = FakeSocket(recv_raises=[Exception(), EOFError()])
+    await server.handle_connection(conn=conn, handler=None)
 
 
-def test_server_thread():
+@pytest.mark.trio
+async def test_server_thread():
     sock = FakeSocket()
     connections = [sock]
-    quit_event = threading.Event()
+    quit_event = trio.Event()
 
     class FakeServer:
-        def accept(self):
+        async def accept(self):
             if not connections:
-                raise socket.timeout()
+                await trio.sleep_forever()
             return connections.pop(), 'address'
 
         def getsockname(self):
             return 'fake_server'
 
-    def handle_conn(conn):
+    async def handle_conn(conn):
         assert conn is sock
         quit_event.set()
 
-    server.server_thread(sock=FakeServer(),
-                         handle_conn=handle_conn,
-                         quit_event=quit_event)
-    quit_event.wait()
+    await server.server_thread(sock=FakeServer(),
+                               handle_conn=handle_conn,
+                               quit_event=quit_event)
 
 
-def test_spawn():
-    obj = []
-
-    def thread(x):
-        obj.append(x)
-
-    with server.spawn(thread, {'x': 1}):
-        pass
-
-    assert obj == [1]
-
-
-def test_run():
-    assert server.run_process(['true'], environ={}) == 0
-    assert server.run_process(['false'], environ={}) == 1
-    assert server.run_process(command=['bash', '-c', 'exit $X'],
-                              environ={'X': '42'}) == 42
+@pytest.mark.trio
+async def test_run():
+    assert await server.run_process(['true'], environ={}) == 0
+    assert await server.run_process(['false'], environ={}) == 1
+    assert await server.run_process(command=['bash', '-c', 'exit $X'],
+                                    environ={'X': '42'}) == 42
 
     with pytest.raises(OSError):
-        server.run_process([''], environ={})
+        await server.run_process([''], environ={})
 
 
-def test_remove():
+@pytest.mark.trio
+async def test_remove():
     path = 'foo.bar'
+    paths = set()
+    force_exists_paths = set()
 
-    def remove(p):
-        assert p == path
+    class FakePath:
+        def __init__(self, paths, force_exists_paths, path):
+            self.path = path
+            self.paths = paths
+            self.force_exists_paths = force_exists_paths
 
-    server.remove_file(path, remove=remove)
+        async def unlink(self):
+            if self.path not in self.paths:
+                raise OSError('boom')
+            self.paths.remove(self.path)
 
-    def remove_raise(_):
-        raise OSError('boom')
+        async def exists(self):
+            return self.path in self.paths or self.path in self.force_exists_paths
 
-    server.remove_file(path, remove=remove_raise, exists=lambda _: False)
+    fake_path = functools.partial(FakePath, paths, force_exists_paths)
+    paths.add(path)
+
+    await server.remove_file(path, trio_path=fake_path)
+
+    await server.remove_file(path, trio_path=fake_path)
+
+    force_exists_paths.add(path)
 
     with pytest.raises(OSError):
-        server.remove_file(path, remove=remove_raise, exists=lambda _: True)
+        await server.remove_file(path, trio_path=fake_path)

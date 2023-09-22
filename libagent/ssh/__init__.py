@@ -12,9 +12,10 @@ import string
 import subprocess
 import sys
 import tempfile
-import threading
 
 import configargparse
+import trio
+import trio_util
 
 try:
     # TODO: Not supported on Windows. Use daemoniker instead?
@@ -28,17 +29,16 @@ from . import client, protocol
 
 log = logging.getLogger(__name__)
 
-UNIX_SOCKET_TIMEOUT = 0.1
 SOCK_TYPE = 'Windows named pipe' if sys.platform == 'win32' else 'UNIX domain socket'
 SOCK_TYPE_PATH = 'Windows named pipe path' if sys.platform == 'win32' else 'UNIX socket path'
 FILE_PREFIX = 'file:'
 
 
-def ssh_args(conn):
+@contextlib.asynccontextmanager
+async def ssh_args(previous, conn):
     """Create SSH command for connecting specified server."""
     I, = conn.identities
     identity = I.identity_dict
-    pubkey_tempfile, = conn.public_keys_as_files()
 
     args = []
     if 'port' in identity:
@@ -46,12 +46,15 @@ def ssh_args(conn):
     if 'user' in identity:
         args += ['-l', identity['user']]
 
-    args += ['-o', 'IdentityFile={}'.format(pubkey_tempfile.name)]
-    args += ['-o', 'IdentitiesOnly=true']
-    return args + [identity['host']]
+    async with conn.public_keys_as_file() as pubkey_tempfile_name:
+        args += ['-o', 'IdentityFile={}'.format(pubkey_tempfile_name)]
+        args += ['-o', 'IdentitiesOnly=true']
+        async with previous(conn) as command:
+            yield ['ssh'] + args + [identity['host']] + command
 
 
-def mosh_args(conn):
+@contextlib.asynccontextmanager
+async def mosh_args(previous, conn):
     """Create SSH command for connecting specified server."""
     I, = conn.identities
     identity = I.identity_dict
@@ -64,7 +67,8 @@ def mosh_args(conn):
     else:
         args += [identity['host']]
 
-    return args
+    async with previous(conn) as command:
+        yield ['mosh'] + args + command
 
 
 def _to_unicode(s):
@@ -93,9 +97,6 @@ def create_agent_parser(device_type):
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
                    default=formats.CURVE_NIST256,
                    help='specify ECDSA curve name: ' + curve_names)
-    p.add_argument('--timeout',
-                   default=UNIX_SOCKET_TIMEOUT, type=float,
-                   help='timeout for accepting SSH client connections')
     p.add_argument('--debug', default=False, action='store_true',
                    help='log SSH protocol messages for debugging.')
     p.add_argument('--log-file', type=str,
@@ -133,29 +134,18 @@ def create_agent_parser(device_type):
     return p
 
 
-@contextlib.contextmanager
-def serve(handler, sock_path, timeout=UNIX_SOCKET_TIMEOUT):
-    """
-    Start the ssh-agent server on a UNIX-domain socket.
-
-    If no connection is made during the specified timeout,
-    retry until the context is over.
-    """
+@contextlib.asynccontextmanager
+async def serve(handler, sock_path):
+    """Start the ssh-agent server on a UNIX-domain socket."""
     ssh_version = subprocess.check_output(['ssh', '-V'],
                                           stderr=subprocess.STDOUT)
     log.debug('local SSH version: %r', ssh_version)
     environ = {'SSH_AUTH_SOCK': sock_path, 'SSH_AGENT_PID': str(os.getpid())}
-    device_mutex = threading.Lock()
-    with server.unix_domain_socket_server(sock_path) as sock:
-        sock.settimeout(timeout)
-        quit_event = threading.Event()
+    async with server.unix_domain_socket_server(sock_path) as sock:
+        quit_event = trio.Event()
         handle_conn = functools.partial(server.handle_connection,
-                                        handler=handler,
-                                        mutex=device_mutex)
-        kwargs = {'sock': sock,
-                  'handle_conn': handle_conn,
-                  'quit_event': quit_event}
-        with server.spawn(server.server_thread, kwargs):
+                                        handler=handler)
+        async with trio_util.move_on_when(server.server_thread, sock, handle_conn, quit_event):
             try:
                 yield environ
             finally:
@@ -163,23 +153,30 @@ def serve(handler, sock_path, timeout=UNIX_SOCKET_TIMEOUT):
                 quit_event.set()
 
 
-def run_server(conn, command, sock_path, debug, timeout):
-    """Common code for run_agent and run_git below."""
+async def run_server(conn_context, command_context, sock_path, debug):
+    """Run the SSH agent. Optionally execute a command while the agent is running."""
     ret = 0
     try:
-        handler = protocol.Handler(conn=conn, debug=debug)
-        with serve(handler=handler, sock_path=sock_path,
-                   timeout=timeout) as env:
-            if command:
-                ret = server.run_process(command=command, environ=env)
-            else:
-                try:
-                    signal.pause()  # wait for signal (e.g. SIGINT)
-                except AttributeError:
-                    sys.stdin.read()  # Windows doesn't support signal.pause
-    except KeyboardInterrupt:
+        # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
+        async with conn_context as conn:
+            handler = protocol.Handler(conn=conn, debug=debug)
+            async with serve(handler=handler, sock_path=sock_path) as env:
+                async with command_context(conn) as command:
+                    if command:
+                        ret = await server.run_process(command=command, environ=env)
+                    else:
+                        await trio.sleep_forever()  # Wait until the server has stopped
+    finally:
         log.info('server stopped')
     return ret
+
+
+async def show_public_keys(conn_context):
+    """Command for showing public keys associated with the provided identities."""
+    async with conn_context as conn:
+        for pk in await conn.public_keys():
+            sys.stdout.write(pk)
+        return 0  # success exit code
 
 
 def handle_connection_error(func):
@@ -209,74 +206,49 @@ def import_public_keys(contents):
         yield line
 
 
-class ClosableNamedTemporaryFile():
-    """Creates a temporary file that is not deleted when the file is closed.
-
-    This allows the file to be opened with an exclusive lock, but used by other programs before
-    it is deleted
-    """
-
-    def __init__(self):
-        """Create a temporary file."""
-        self.file = tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w', delete=False)
-        self.name = self.file.name
-
-    def write(self, buf):
-        """Write `buf` to the file."""
-        self.file.write(buf)
-
-    def close(self):
-        """Closes the file, allowing it to be opened by other programs. Does not delete the file."""
-        self.file.close()
-
-    def __del__(self):
-        """Deletes the temporary file."""
-        try:
-            os.unlink(self.file.name)
-        except OSError:
-            log.warning("Failed to delete temporary file: %s", self.file.name)
-
-
 class JustInTimeConnection:
     """Connect to the device just before the needed operation."""
 
-    def __init__(self, conn_factory, identities, public_keys=None):
+    def __init__(self, conn, identities, public_keys=None):
         """Create a JIT connection object."""
-        self.conn_factory = conn_factory
+        self.conn = conn
         self.identities = identities
         self.public_keys_cache = public_keys
-        self.public_keys_tempfiles = []
 
-    def public_keys(self):
+    async def public_keys(self):
         """Return a list of SSH public keys (in textual format)."""
         if not self.public_keys_cache:
-            conn = self.conn_factory()
-            self.public_keys_cache = conn.export_public_keys(self.identities)
+            self.public_keys_cache = await self.conn.export_public_keys(self.identities)
         return self.public_keys_cache
 
-    def parse_public_keys(self):
+    async def parse_public_keys(self):
         """Parse SSH public keys into dictionaries."""
         public_keys = [formats.import_public_key(pk)
-                       for pk in self.public_keys()]
+                       for pk in await self.public_keys()]
         for pk, identity in zip(public_keys, self.identities):
             pk['identity'] = identity
         return public_keys
 
-    def public_keys_as_files(self):
+    @contextlib.asynccontextmanager
+    async def public_keys_as_file(self):
         """Store public keys as temporary SSH identity files."""
-        if not self.public_keys_tempfiles:
-            for pk in self.public_keys():
-                f = ClosableNamedTemporaryFile()
-                f.write(pk)
-                f.close()
-                self.public_keys_tempfiles.append(f)
+        tf = tempfile.NamedTemporaryFile(prefix='trezor-ssh-pubkey-', mode='w', delete=False)
+        try:
+            async with trio.wrap_file(tf) as f:
+                for pk in await self.public_keys():
+                    await f.write(pk)
+                    await f.write('\n')
 
-        return self.public_keys_tempfiles
+            yield tf.name
+        finally:
+            try:
+                await trio.Path(tf.name).unlink()
+            except OSError:
+                log.warning("Failed to delete temporary file: %s", tf.name)
 
-    def sign(self, blob, identity):
+    async def sign(self, blob, identity):
         """Sign a given blob using the specified identity on the device."""
-        conn = self.conn_factory()
-        return conn.sign_ssh_challenge(blob=blob, identity=identity)
+        return await self.conn.sign_ssh_challenge(blob=blob, identity=identity)
 
 
 @contextlib.contextmanager
@@ -297,10 +269,25 @@ def _get_sock_path(args):
         return tempfile.mktemp(prefix='trezor-ssh-agent-')
 
 
+@contextlib.asynccontextmanager
+async def _command_context_constant(command, *_):
+    yield command
+
+
+@contextlib.asynccontextmanager
+async def _just_in_time_conection(device_type, config, identities, public_keys):
+    # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
+    async with await device.ui.UI.create(device_type=device_type, config=config) as ui:
+        conn = JustInTimeConnection(
+            conn=client.Client(ui),
+            identities=identities, public_keys=public_keys)
+        yield conn
+
+
 @handle_connection_error
 def main(device_type):
     """Run ssh-agent using given hardware client factory."""
-    args = create_agent_parser(device_type=device_type).parse_args()
+    args = create_agent_parser(device_type=device_type).parse_intermixed_args()
     util.setup_logging(verbosity=args.verbose, filename=args.log_file)
 
     public_keys = None
@@ -321,39 +308,37 @@ def main(device_type):
         identity.identity_dict['proto'] = 'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
 
-    # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
-    device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
-
-    conn = JustInTimeConnection(
-        conn_factory=lambda: client.Client(device_type()),
-        identities=identities, public_keys=public_keys)
+    conn_context = _just_in_time_conection(device_type, vars(args), identities, public_keys)
 
     sock_path = _get_sock_path(args)
-    command = args.command
+    command_context = functools.partial(_command_context_constant, args.command)
+    show_pks = not args.command
     context = _dummy_context()
     if args.connect:
-        command = ['ssh'] + ssh_args(conn) + args.command
+        show_pks = False
+        command_context = functools.partial(ssh_args, command_context)
     elif sys.platform != 'win32' and args.mosh:
-        command = ['mosh'] + mosh_args(conn) + args.command
+        show_pks = False
+        command_context = functools.partial(mosh_args, command_context)
     elif daemon and args.daemonize:
+        show_pks = False
         out = 'SSH_AUTH_SOCK={0}; export SSH_AUTH_SOCK;\n'.format(sock_path)
         sys.stdout.write(out)
         sys.stdout.flush()
         context = daemon.DaemonContext()
         log.info('running the agent as a daemon on %s', sock_path)
     elif args.foreground:
+        show_pks = False
         log.info('running the agent on %s', sock_path)
 
     use_shell = bool(args.shell)
     if use_shell:
-        command = os.environ['SHELL']
+        show_pks = False
+        command_context = functools.partial(_command_context_constant, [os.environ['SHELL']])
         sys.stdin.close()
 
-    if command or (daemon and args.daemonize) or args.foreground:
+    if not show_pks:
         with context:
-            return run_server(conn=conn, command=command, sock_path=sock_path,
-                              debug=args.debug, timeout=args.timeout)
+            return trio.run(run_server, conn_context, command_context, sock_path, args.debug)
     else:
-        for pk in conn.public_keys():
-            sys.stdout.write(pk)
-        return 0  # success exit code
+        return trio.run(show_public_keys, conn_context)
