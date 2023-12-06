@@ -290,16 +290,17 @@ class ExpiringCache:
         """C-tor."""
         self.duration = seconds
         self.timer = timer
-        self.value = None
-        self.set(None)
+        self.values = {}
 
-    def get(self):
+    def get(self, key):
         """Returns existing value, or None if deadline has expired."""
-        if self.timer() > self.deadline:
-            self.value = None
-        return self.value
+        curtime = self.timer()
+        self.values = {k: v for k, v in self.values.items() if curtime <= v[0]}
+        return self.values.get(key, (None, None))[1]
 
-    def set(self, value):
+    def set(self, key, value):
         """Set new value and reset the deadline for expiration."""
-        self.deadline = self.timer() + self.duration
-        self.value = value
+        self.values[key] = (
+            self.timer() + self.duration,
+            value
+        )

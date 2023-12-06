@@ -26,6 +26,10 @@ class FakeDevice(interface.Device):
         """Python package name."""
         return 'fake-device-agent'
 
+    @classmethod
+    def setup_arg_parser(cls, parser):
+        """Add device-specific parameters to the argument parser."""
+
     def connect(self):
         """Return "dummy" connection."""
         log.critical('NEVER USE THIS CODE FOR REAL-LIFE USE-CASES!!!')

@@ -30,6 +30,10 @@ class BlockstreamJade(interface.Device):
         """Python package name (at PyPI)."""
         return 'jade-agent'
 
+    @classmethod
+    def setup_arg_parser(cls, parser):
+        """Add device-specific parameters to the argument parser."""
+
     def connect(self):
         """Connect to the first matching device."""
         # pylint: disable=import-error
