@@ -7,9 +7,10 @@ import logging
 import os
 import re
 import socket
-import subprocess
 import sys
 import urllib.parse
+
+import trio
 
 from .. import util
 
@@ -19,54 +20,53 @@ if sys.platform == 'win32':
 log = logging.getLogger(__name__)
 
 
-def check_output(args, env=None, sp=subprocess):
+async def check_output(args, env=None, run_process=trio.run_process):
     """Call an external binary and return its stdout."""
     log.debug('calling %s with env %s', args, env)
-    p = sp.Popen(args=args, env=env, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
-    (output, error) = p.communicate()
-    log.debug('output: %r', output)
-    if error:
-        log.debug('error: %r', error)
-    return output
+    info = await run_process(args, env=env, capture_stdout=True, capture_stderr=True)
+    log.debug('output: %r', info.stdout)
+    if info.stderr:
+        log.debug('error: %r', info.stderr)
+    return info.stdout
 
 
-def get_agent_sock_path(env=None, sp=subprocess):
+async def get_agent_sock_path(env=None, run_process=trio.run_process):
     """Parse gpgconf output to find out GPG agent UNIX socket path."""
-    args = [util.which('gpgconf'), '--list-dirs', 'agent-socket']
-    return check_output(args=args, env=env, sp=sp).strip()
+    args = [await util.which('gpgconf'), '--list-dirs', 'agent-socket']
+    return (await check_output(args=args, env=env, run_process=run_process)).strip()
 
 
-def connect_to_agent(env=None, sp=subprocess):
+async def connect_to_agent(env=None, run_process=trio.run_process):
     """Connect to GPG agent's UNIX socket."""
-    sock_path = get_agent_sock_path(sp=sp, env=env)
+    sock_path = get_agent_sock_path(run_process=run_process, env=env)
     # Make sure the original gpg-agent is running.
-    check_output(args=['gpg-connect-agent', '/bye'], sp=sp)
+    await check_output(args=['gpg-connect-agent', '/bye'], run_process=run_process)
     if sys.platform == 'win32':
-        sock = win_server.Client(sock_path)
+        sock = await win_server.Client.open(sock_path)
     else:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(sock_path)
+        await sock.connect(sock_path)
     return sock
 
 
-def communicate(sock, msg):
+async def communicate(sock, msg):
     """Send a message and receive a single line."""
-    sendline(sock, msg.encode('ascii'))
-    return recvline(sock)
+    await sendline(sock, msg.encode('ascii'))
+    return await recvline(sock)
 
 
-def sendline(sock, msg, confidential=False):
+async def sendline(sock, msg, confidential=False):
     """Send a binary message, followed by EOL."""
     log.debug('<- %r', ('<snip>' if confidential else msg))
-    sock.sendall(msg + b'\n')
+    await util.send(sock, msg + b'\n')
 
 
-def recvline(sock):
+async def recvline(sock):
     """Receive a single line from the socket."""
     reply = io.BytesIO()
 
     while True:
-        c = sock.recv(1)
+        c = await sock.recv(1)
         if not c:
             return None  # socket is closed
 
@@ -79,10 +79,10 @@ def recvline(sock):
     return result
 
 
-def iterlines(conn):
+async def iterlines(conn):
     """Iterate over input, split by lines."""
     while True:
-        line = recvline(conn)
+        line = await recvline(conn)
         if line is None:
             break
         yield line
@@ -153,14 +153,14 @@ def parse_sig(sig):
     return parser(args=sig[1:])
 
 
-def sign_digest(sock, keygrip, digest, sp=subprocess, environ=None):
+async def sign_digest(sock, keygrip, digest, run_process=trio.run_process, environ=None):
     """Sign a digest using specified key using GPG agent."""
     hash_algo = 8  # SHA256
     assert len(digest) == 32
 
-    assert communicate(sock, 'RESET').startswith(b'OK')
+    assert (await communicate(sock, 'RESET')).startswith(b'OK')
 
-    ttyname = check_output(args=['tty'], sp=sp).strip()
+    ttyname = (await check_output(args=['tty'], run_process=run_process)).strip()
     options = ['ttyname={}'.format(ttyname)]  # set TTY for passphrase entry
 
     display = (environ or os.environ).get('DISPLAY')
@@ -168,18 +168,18 @@ def sign_digest(sock, keygrip, digest, sp=subprocess, environ=None):
         options.append('display={}'.format(display))
 
     for opt in options:
-        assert communicate(sock, 'OPTION {}'.format(opt)) == b'OK'
+        assert await communicate(sock, 'OPTION {}'.format(opt)) == b'OK'
 
-    assert communicate(sock, 'SIGKEY {}'.format(keygrip)) == b'OK'
+    assert await communicate(sock, 'SIGKEY {}'.format(keygrip)) == b'OK'
     hex_digest = binascii.hexlify(digest).upper().decode('ascii')
-    assert communicate(sock, 'SETHASH {} {}'.format(hash_algo,
-                                                    hex_digest)) == b'OK'
+    assert await communicate(sock, 'SETHASH {} {}'.format(hash_algo,
+                                                          hex_digest)) == b'OK'
 
-    assert communicate(sock, 'SETKEYDESC '
-                       'Sign+a+new+TREZOR-based+subkey') == b'OK'
-    assert communicate(sock, 'PKSIGN') == b'OK'
+    assert await communicate(sock, 'SETKEYDESC '
+                             'Sign+a+new+TREZOR-based+subkey') == b'OK'
+    assert await communicate(sock, 'PKSIGN') == b'OK'
     while True:
-        line = recvline(sock).strip()
+        line = (await recvline(sock)).strip()
         if not line.startswith(b'S PROGRESS'):
             break
     line = unescape(line)
@@ -193,10 +193,10 @@ def sign_digest(sock, keygrip, digest, sp=subprocess, environ=None):
     return parse_sig(sig)
 
 
-def get_gnupg_components(sp=subprocess):
+async def get_gnupg_components(run_process=trio.run_process):
     """Parse GnuPG components' paths."""
-    args = [util.which('gpgconf'), '--list-components']
-    output = check_output(args=args, sp=sp)
+    args = [await util.which('gpgconf'), '--list-components']
+    output = await check_output(args=args, run_process=run_process)
     components = {k: urllib.parse.unquote(v) for k, v in re.findall(
                   r'(?<!:)([^\n\r:]*):[^\n\r:]*:([^\n\r:]*)(?!:)', output.decode('utf-8'))}
     log.debug('gpgconf --list-components: %s', components)
@@ -204,73 +204,73 @@ def get_gnupg_components(sp=subprocess):
 
 
 @util.memoize
-def get_gnupg_binary(sp=subprocess, neopg_binary=None):
+async def get_gnupg_binary(run_process=trio.run_process, neopg_binary=None):
     """Starting GnuPG 2.2.x, the default installation uses `gpg`."""
     if neopg_binary:
         return neopg_binary
-    return get_gnupg_components(sp=sp)['gpg']
+    return (await get_gnupg_components(run_process=run_process))['gpg']
 
 
 @util.memoize
-def get_pinentry_binary(sp=subprocess):
+async def get_pinentry_binary(run_process=trio.run_process):
     """Returns the exact path to `pinentry` if GPG is installed."""
     try:
-        return get_gnupg_components(sp=sp)['pinentry']
+        return (await get_gnupg_components(run_process=run_process))['pinentry']
     except Exception:  # pylint: disable=broad-except
         return 'pinentry'
 
 
-def gpg_command(args, env=None):
+async def gpg_command(args, env=None):
     """Prepare common GPG command line arguments."""
     if env is None:
         env = os.environ
-    cmd = get_gnupg_binary(neopg_binary=env.get('NEOPG_BINARY'))
+    cmd = await get_gnupg_binary(neopg_binary=env.get('NEOPG_BINARY'))
     return [cmd] + args
 
 
-def get_keygrip(user_id, sp=subprocess):
+async def get_keygrip(user_id, run_process=trio.run_process):
     """Get a keygrip of the primary GPG key of the specified user."""
-    args = gpg_command(['--list-keys', '--with-keygrip', user_id])
-    output = check_output(args=args, sp=sp).decode('utf-8')
+    args = await gpg_command(['--list-keys', '--with-keygrip', user_id])
+    output = await check_output(args=args, run_process=run_process).decode('utf-8')
     return re.findall(r'Keygrip = (\w+)', output)[0]
 
 
-def gpg_version(sp=subprocess):
+async def gpg_version(run_process=trio.run_process):
     """Get a keygrip of the primary GPG key of the specified user."""
-    args = gpg_command(['--version'])
-    output = check_output(args=args, sp=sp)
+    args = await gpg_command(['--version'])
+    output = await check_output(args=args, run_process=run_process)
     line = re.split('[\n\r]+', output.decode('utf-8'))[0]  # b'gpg (GnuPG) 2.1.11'
     line = line.split(' ')[-1]  # b'2.1.11'
     line = line.split('-')[0]  # remove trailing version parts
     return line.split('v')[-1].encode()  # remove 'v' prefix
 
 
-def export_public_key(user_id, env=None, sp=subprocess):
+async def export_public_key(user_id, env=None, run_process=trio.run_process):
     """Export GPG public key for specified `user_id`."""
-    args = gpg_command(['--export', user_id])
-    result = check_output(args=args, env=env, sp=sp)
+    args = await gpg_command(['--export', user_id])
+    result = await check_output(args=args, env=env, run_process=run_process)
     if not result:
         log.error('could not find public key %r in local GPG keyring', user_id)
         raise KeyError(user_id)
     return result
 
 
-def export_public_keys(env=None, sp=subprocess):
+async def export_public_keys(env=None, run_process=trio.run_process):
     """Export all GPG public keys."""
-    args = gpg_command(['--export'])
-    result = check_output(args=args, env=env, sp=sp)
+    args = await gpg_command(['--export'])
+    result = await check_output(args=args, env=env, run_process=run_process)
     if not result:
         raise KeyError('No GPG public keys found at env: {!r}'.format(env))
     return result
 
 
-def create_agent_signer(user_id):
+async def create_agent_signer(user_id):
     """Sign digest with existing GPG keys using gpg-agent tool."""
-    sock = connect_to_agent(env=os.environ)
-    keygrip = get_keygrip(user_id)
+    sock = await connect_to_agent(env=os.environ)
+    keygrip = await get_keygrip(user_id)
 
-    def sign(digest):
+    async def sign(digest):
         """Sign the digest and return an ECDSA/RSA/DSA signature."""
-        return sign_digest(sock=sock, keygrip=keygrip, digest=digest)
+        return await sign_digest(sock=sock, keygrip=keygrip, digest=digest)
 
     return sign

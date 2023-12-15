@@ -29,24 +29,27 @@ class FakeSocket:
     def __init__(self):
         self.buf = io.BytesIO()
 
-    def sendall(self, data):
+    async def send(self, data):
         self.buf.write(data)
+        return len(data)
 
-    def recv(self, size):
+    async def recv(self, size):
         return self.buf.read(size)
 
 
-def test_send_recv():
+@pytest.mark.trio
+async def test_send_recv():
     s = FakeSocket()
-    util.send(s, b'123')
-    util.send(s, b'*')
+    await util.send(s, b'123')
+    await util.send(s, b'*')
     assert s.buf.getvalue() == b'123*'
 
     s.buf.seek(0)
-    assert util.recv(s, 2) == b'12'
-    assert util.recv(s, 2) == b'3*'
+    assert await util.recv_async(s, 2) == b'12'
+    assert await util.recv_async(s, 2) == b'3*'
 
-    pytest.raises(EOFError, util.recv, s, 1)
+    with pytest.raises(EOFError):
+        await util.recv_async(s, 1)
 
 
 def test_crc24():
@@ -104,16 +107,17 @@ def test_setup_logging():
     util.setup_logging(verbosity=10, filename='/dev/null')
 
 
-def test_memoize():
+@pytest.mark.trio
+async def test_memoize():
     f = mock.Mock(side_effect=lambda x: x)
 
-    def func(x):
+    @util.memoize
+    async def func(x):
         # mock.Mock doesn't work with functools.wraps()
         return f(x)
 
-    g = util.memoize(func)
-    assert g(1) == g(1)
-    assert g(1) != g(2)
+    assert await func(1) == await func(1)
+    assert await func(1) != await func(2)
     assert f.mock_calls == [mock.call(1), mock.call(2)]
 
 
@@ -125,22 +129,23 @@ def test_assuan_serialize():
 
 def test_cache():
     timer = mock.Mock(side_effect=range(7))
-    c = util.ExpiringCache(seconds=2, timer=timer)  # t=0
-    assert c.get() is None                          # t=1
+    c = util.ExpiringCache(seconds=2, timer=timer)
+    c.set('not_the_key', 'unused')                  # t=0
+    assert c.get('key') is None                     # t=1
     obj = 'foo'
-    c.set(obj)                                      # t=2
-    assert c.get() is obj                           # t=3
-    assert c.get() is obj                           # t=4
-    assert c.get() is None                          # t=5
-    assert c.get() is None                          # t=6
+    c.set('key', obj)                               # t=2
+    assert c.get('key') is obj                      # t=3
+    assert c.get('key') is obj                      # t=4
+    assert c.get('key') is None                     # t=5
+    assert c.get('key') is None                     # t=6
 
 
 def test_cache_inf():
     timer = mock.Mock(side_effect=range(6))
     c = util.ExpiringCache(seconds=float('inf'), timer=timer)
     obj = 'foo'
-    c.set(obj)
-    assert c.get() is obj
-    assert c.get() is obj
-    assert c.get() is obj
-    assert c.get() is obj
+    c.set('key', obj)
+    assert c.get('key') is obj
+    assert c.get('key') is obj
+    assert c.get('key') is obj
+    assert c.get('key') is obj

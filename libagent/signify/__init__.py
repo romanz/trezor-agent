@@ -7,14 +7,15 @@ import logging
 import sys
 import time
 
-from .. import util
-from ..device import interface, ui
+import trio
+
+from .. import device, util
 
 log = logging.getLogger(__name__)
 
 
 def _create_identity(user_id):
-    result = interface.Identity(identity_str='signify://', curve_name='ed25519')
+    result = device.interface.Identity(identity_str='signify://', curve_name='ed25519')
     result.identity_dict['host'] = user_id
     return result
 
@@ -22,22 +23,23 @@ def _create_identity(user_id):
 class Client:
     """Sign messages and get public keys from a hardware device."""
 
-    def __init__(self, device):
+    def __init__(self, ui):
         """C-tor."""
-        self.device = device
+        self.ui = ui
+        self.ui.cached_passphrase_ack = util.ExpiringCache(seconds=float(60))
 
-    def pubkey(self, identity):
+    async def pubkey(self, identity):
         """Return public key as VerifyingKey object."""
-        with self.device:
-            return bytes(self.device.pubkey(ecdh=False, identity=identity))
+        async with self.ui.device() as d:
+            return bytes(await d.pubkey(ecdh=False, identity=identity))
 
-    def sign_with_pubkey(self, identity, data):
+    async def sign_with_pubkey(self, identity, data):
         """Sign the data and return a signature."""
         log.info('please confirm Signify signature on %s for "%s"...',
-                 self.device, identity.to_string())
+                 self.ui.get_device_name(), identity.to_string())
         log.debug('signing data: %s', util.hexlify(data))
-        with self.device:
-            sig, pubkey = self.device.sign_with_pubkey(blob=data, identity=identity)
+        async with self.ui.device() as d:
+            sig, pubkey = await d.sign_with_pubkey(blob=data, identity=identity)
             assert len(sig) == 64
             assert len(pubkey) == 33
             assert pubkey[:1] == b"\x00"
@@ -54,21 +56,22 @@ def format_payload(pubkey, data, sig_alg):
     return binascii.b2a_base64(sig_alg + keynum + data).decode("ascii")
 
 
-def run_pubkey(device_type, args):
+async def run_pubkey(device_type, args):
     """Export hardware-based Signify public key."""
     util.setup_logging(verbosity=args.verbose)
     log.warning('This Signify tool is still in EXPERIMENTAL mode, '
                 'so please note that the key derivation, API, and features '
                 'may change without backwards compatibility!')
 
-    identity = _create_identity(user_id=args.user_id)
-    pubkey = Client(device=device_type()).pubkey(identity=identity)
-    comment = f'untrusted comment: identity {identity.to_string()}\n'
-    payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
-    print(comment + payload, end="")
+    async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
+        identity = _create_identity(user_id=args.user_id)
+        pubkey = await Client(ui=ui).pubkey(identity=identity)
+        comment = f'untrusted comment: identity {identity.to_string()}\n'
+        payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
+        print(comment + payload, end="")
 
 
-def run_sign(device_type, args):
+async def run_sign(device_type, args):
     """Prehash & sign an input blob using Ed25519."""
     util.setup_logging(verbosity=args.verbose)
     identity = _create_identity(user_id=args.user_id)
@@ -81,16 +84,18 @@ def run_sign(device_type, args):
         sig_alg = ALG_MINISIGN
         data_to_sign = hashlib.blake2b(data_to_sign).digest()
 
-    sig, pubkey = Client(device=device_type()).sign_with_pubkey(identity, data_to_sign)
-    pubkey_str = format_payload(pubkey=pubkey, data=pubkey, sig_alg=sig_alg)
-    sig_str = format_payload(pubkey=pubkey, data=sig, sig_alg=sig_alg)
-    untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
-    print(untrusted_comment + sig_str, end="")
+    async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
+        c = Client(ui=ui)
+        sig, pubkey = await c.sign_with_pubkey(identity, data_to_sign)
+        pubkey_str = format_payload(pubkey=pubkey, data=pubkey, sig_alg=sig_alg)
+        sig_str = format_payload(pubkey=pubkey, data=sig, sig_alg=sig_alg)
+        untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
+        print(untrusted_comment + sig_str, end="")
 
-    comment_to_sign = sig + args.comment.encode()
-    sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
-    sig_str = binascii.b2a_base64(sig).decode("ascii")
-    print(f'trusted comment: {args.comment}\n' + sig_str, end="")
+        comment_to_sign = sig + args.comment.encode()
+        sig, _ = await c.sign_with_pubkey(identity, comment_to_sign)
+        sig_str = binascii.b2a_base64(sig).decode("ascii")
+        print(f'trusted comment: {args.comment}\n' + sig_str, end="")
 
 
 def main(device_type):
@@ -113,7 +118,5 @@ def main(device_type):
     p.set_defaults(func=run_sign)
 
     args = parser.parse_args()
-    device_type.ui = ui.UI(device_type=device_type, config=vars(args))
-    device_type.ui.cached_passphrase_ack = util.ExpiringCache(seconds=float(60))
 
-    return args.func(device_type=device_type, args=args)
+    return trio.run(args.func, device_type, args)

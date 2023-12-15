@@ -1,10 +1,10 @@
 """Windows named pipe server simulating a UNIX socket."""
-import contextlib
-import ctypes
 import io
 import os
-import socket
 
+import trio
+import trio.lowlevel
+import trio.socket
 import win32api
 import win32event
 import win32file
@@ -13,29 +13,9 @@ import winerror
 
 from . import util
 
-kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-
 PIPE_BUFFER_SIZE = 64 * 1024
 CTRL_C_EVENT = 0
 THREAD_SET_CONTEXT = 0x0010
-
-
-# Workaround for Ctrl+C not stopping IO on Windows
-# See https://github.com/python/cpython/issues/85609
-@contextlib.contextmanager
-def ctrl_cancel_async_io(file_handle):
-    """Listen for SIGINT and translate it to interrupting IO on the specified file handle."""
-    @ctypes.WINFUNCTYPE(ctypes.c_uint, ctypes.c_uint)
-    def ctrl_handler(ctrl_event):
-        if ctrl_event == CTRL_C_EVENT:
-            kernel32.CancelIoEx(file_handle, None)
-        return False
-
-    try:
-        kernel32.SetConsoleCtrlHandler(ctrl_handler, True)
-        yield
-    finally:
-        kernel32.SetConsoleCtrlHandler(ctrl_handler, False)
 
 
 # Based loosely on https://docs.microsoft.com/en-us/windows/win32/ipc/multithreaded-pipe-server
@@ -46,8 +26,8 @@ class NamedPipe:
     or as a client connecting to a listener.
     """
 
-    @staticmethod
-    def __close(handle, disconnect):
+    @classmethod
+    def __close(cls, handle, disconnect):
         """Closes a named pipe handle."""
         if handle == win32file.INVALID_HANDLE_VALUE:
             return
@@ -56,8 +36,8 @@ class NamedPipe:
             win32pipe.DisconnectNamedPipe(handle)
         win32api.CloseHandle(handle)
 
-    @staticmethod
-    def create(name):
+    @classmethod
+    def create(cls, name):
         """Opens a named pipe server for receiving connections."""
         handle = win32pipe.CreateNamedPipe(
             name,
@@ -83,14 +63,14 @@ class NamedPipe:
                 win32event.SetEvent(overlapped.hEvent)
                 if error_code != winerror.ERROR_PIPE_CONNECTED:
                     raise IOError('ConnectNamedPipe failed ({0})'.format(error_code))
-            ret = NamedPipe(name, handle, overlapped, pending_io, True)
+            ret = cls(name, handle, overlapped, pending_io, True)
             handle = win32file.INVALID_HANDLE_VALUE
             return ret
         finally:
             NamedPipe.__close(handle, True)
 
-    @staticmethod
-    def open(name):
+    @classmethod
+    def open(cls, name):
         """Opens a named pipe server for receiving connections."""
         handle = win32file.CreateFile(
             name,
@@ -108,11 +88,19 @@ class NamedPipe:
             overlapped = win32file.OVERLAPPED()
             overlapped.hEvent = win32event.CreateEvent(None, True, True, None)
             win32pipe.SetNamedPipeHandleState(handle, win32pipe.PIPE_READMODE_BYTE, None, None)
-            ret = NamedPipe(name, handle, overlapped, False, False)
+            ret = cls(name, handle, overlapped, False, False)
             handle = win32file.INVALID_HANDLE_VALUE
             return ret
         finally:
             NamedPipe.__close(handle, False)
+
+    def __enter__(self):
+        """Context manager support."""
+        return self
+
+    def __exit__(self, *_):
+        """Context manager support."""
+        self.close()
 
     def __init__(self, name, handle, overlapped, pending_io, created):
         """Should not be called directly.
@@ -125,28 +113,19 @@ class NamedPipe:
         self.overlapped = overlapped
         self.pending_io = pending_io
         self.created = created
-        self.retain_buf = bytes()
-        self.timeout = win32event.INFINITE
 
     def __del__(self):
         """Close the named pipe."""
         self.close()
-
-    def settimeout(self, timeout):
-        """Sets the timeout for IO operations on the named pipe in milliseconds."""
-        self.timeout = win32event.INFINITE if timeout is None else int(timeout * 1000)
 
     def close(self):
         """Close the named pipe."""
         NamedPipe.__close(self.handle, self.created)
         self.handle = win32file.INVALID_HANDLE_VALUE
 
-    def connect(self):
-        """Connect to a named pipe with the specified timeout."""
-        with ctrl_cancel_async_io(self.handle):
-            waitHandle = win32event.WaitForSingleObject(self.overlapped.hEvent, self.timeout)
-        if waitHandle == win32event.WAIT_TIMEOUT:
-            raise TimeoutError('Timed out waiting for client on pipe {0}'.format(self.name))
+    async def connect(self):
+        """Connect to a named pipe."""
+        await trio.lowlevel.WaitForSingleObject(int(self.overlapped.hEvent))
         if not self.pending_io:
             return
         win32pipe.GetOverlappedResult(
@@ -158,7 +137,7 @@ class NamedPipe:
             return
         raise IOError('Connection to named pipe {0} failed ({1})'.format(self.name, error_code))
 
-    def recv(self, size):
+    async def recv(self, size):
         """Read data from the pipe."""
         rbuf = win32file.AllocateReadBuffer(min(size, PIPE_BUFFER_SIZE))
         try:
@@ -171,8 +150,7 @@ class NamedPipe:
             if e.winerror == winerror.ERROR_NO_DATA:
                 return None
             raise
-        with ctrl_cancel_async_io(self.handle):
-            win32event.WaitForSingleObject(self.overlapped.hEvent, self.timeout)
+        await trio.lowlevel.WaitForSingleObject(int(self.overlapped.hEvent))
         try:
             chunk_size = win32pipe.GetOverlappedResult(self.handle, self.overlapped, False)
             error_code = win32api.GetLastError()
@@ -184,66 +162,19 @@ class NamedPipe:
                 return None
             raise
 
-    def send(self, data):
+    async def send(self, data):
         """Write from the specified buffer to the pipe."""
         error_code, _ = win32file.WriteFile(self.handle, data, self.overlapped)
         if error_code not in (winerror.NO_ERROR,
                               winerror.ERROR_IO_PENDING,
                               winerror.ERROR_MORE_DATA):
             raise IOError('WriteFile failed ({0})'.format(error_code))
-        with ctrl_cancel_async_io(self.handle):
-            win32event.WaitForSingleObject(self.overlapped.hEvent, self.timeout)
+        await trio.lowlevel.WaitForSingleObject(int(self.overlapped.hEvent))
         written = win32pipe.GetOverlappedResult(self.handle, self.overlapped, False)
         error_code = win32api.GetLastError()
         if error_code != winerror.NO_ERROR:
             raise IOError('WriteFile failed ({0})'.format(error_code))
         return written
-
-    def sendall(self, data):
-        """Send the specified reply to the pipe."""
-        while len(data) > 0:
-            written = self.send(data)
-            data = data[written:]
-
-
-class InterruptibleSocket:
-    """A wrapper for sockets which allows IO operations to be interrupted by SIGINT."""
-
-    def __init__(self, sock):
-        """Wraps the socket object ``sock``."""
-        self.sock = sock
-
-    def __del__(self):
-        """Close the wrapped socket. It should not outlive the wrapper."""
-        self.close()
-
-    def settimeout(self, timeout):
-        """Forward to underlying socket."""
-        self.sock.settimeout(timeout)
-
-    def recv(self, size):
-        """Forward to underlying socket, while monitoring for SIGINT."""
-        try:
-            with ctrl_cancel_async_io(self.sock.fileno()):
-                return self.sock.recv(size)
-        except OSError as e:
-            if e.winerror == 10054:
-                # Convert socket close to end of file
-                return None
-            raise
-
-    def sendall(self, reply):
-        """Forward to underlying socket, while monitoring for SIGINT."""
-        with ctrl_cancel_async_io(self.sock.fileno()):
-            return self.sock.sendall(reply)
-
-    def close(self):
-        """Forward to underlying socket."""
-        return self.sock.close()
-
-    def getsockname(self):
-        """Forward to underlying socket."""
-        return self.sock.getsockname()
 
 
 class Server:
@@ -252,7 +183,8 @@ class Server:
     Supports both Gpg4win-style AF_UNIX emulation and OpenSSH-style AF_UNIX emulation
     """
 
-    def __init__(self, pipe_name):
+    @classmethod
+    async def open(cls, pipe_name):
         """Opens a socket or named pipe.
 
         If ``pipe_name`` is a byte string, it is interpreted as a Gpg4win-style socket.
@@ -263,44 +195,58 @@ class Server:
         If it is a string, it is interpreted as an OpenSSH-style socket.
         The string contains the name of a Windows named pipe.
         """
-        self.timeout = None
-        self.pipe_name = pipe_name
-        self.sock = None
-        self.pipe = None
-        if not isinstance(self.pipe_name, str):
-            # GPG simulated socket via localhost socket
-            self.key = os.urandom(16)
-            self.sock = socket.socket()
-            self.sock.bind(('127.0.0.1', 0))
-            _, port = self.sock.getsockname()
-            self.sock.listen(1)
+        if isinstance(pipe_name, str):
+            return Server(pipe_name, None, None)
+        # GPG simulated socket via localhost socket
+        key = os.urandom(16)
+        sock_close = sock = trio.socket.socket()
+        try:
+            await sock.bind(('127.0.0.1', 0))
+            _, port = sock.getsockname()
+            sock.listen(1)
             # Write key to file
-            with open(self.pipe_name, 'wb') as f:
-                with ctrl_cancel_async_io(f.fileno()):
-                    f.write(str(port).encode())
-                    f.write(b'\n')
-                    f.write(self.key)
+            async with await trio.open_file(pipe_name, 'wb') as f:
+                await f.write(str(port).encode())
+                await f.write(b'\n')
+                await f.write(key)
+            sock_close = None
+            return Server(pipe_name, sock, key)
+        finally:
+            if sock_close:
+                sock_close.close()
+
+    def __enter__(self):
+        """Context manager support."""
+        return self
+
+    def __exit__(self, *_):
+        """Context manager support."""
+        self.close()
+
+    def __init__(self, pipe_name, sock, key):
+        """Should not be called directly.
+
+        Use ``Server.open`` instead.
+        """
+        self.pipe_name = pipe_name
+        self.sock = sock
+        self.key = key
 
     def __del__(self):
         """Close the underlying socket or pipe."""
-        if self.pipe is not None:
-            self.pipe.close()
-        self.pipe = None
+        self.close()
+
+    def close(self):
+        """Close the underlying socket or pipe."""
         if self.sock is not None:
             self.sock.close()
         self.sock = None
-
-    def settimeout(self, timeout):
-        """Set the timeout in seconds."""
-        if self.sock:
-            self.sock.settimeout(timeout)
-        self.timeout = timeout
 
     def getsockname(self):
         """Return the file path or pipe name used for creating this named pipe."""
         return self.pipe_name
 
-    def accept(self):
+    async def accept(self, retry_invalid_client=True):
         """Listens for incoming connections on the socket.
 
         Returns a pair ``(pipe, address)`` where ``pipe`` is a connected socket-like object
@@ -309,28 +255,19 @@ class Server:
         When a named pipe is used, the client's address is the same as the pipe name.
         """
         if self.sock:
-            with ctrl_cancel_async_io(self.sock.fileno()):
-                sock, addr = self.sock.accept()
-            sock = InterruptibleSocket(sock)
-            sock.settimeout(self.timeout)
-            if self.key != util.recv(sock, 16):
+            while True:
+                sock, addr = await self.sock.accept()
+                if self.key == await util.recv_async(sock, 16):
+                    break
                 sock.close()
-                # Simulate timeout on failed connection to allow the caller to retry
-                raise TimeoutError('Illegitimate client tried to connect to pipe {0}'
-                                   .format(self.pipe_name))
-            sock.settimeout(None)
+                if not retry_invalid_client:
+                    raise IOError('Illegitimate client tried to connect to pipe {0}'
+                                  .format(self.pipe_name))
             return (sock, addr)
         else:
             # Named pipe based server
-            if self.pipe is None:
-                self.pipe = NamedPipe.create(self.pipe_name)
-            self.pipe.settimeout(self.timeout)
-            self.pipe.connect()
-            self.pipe.settimeout(None)
-            # A named pipe can only accept a single connection
-            # It must be recreated if a new connection is to be made
-            pipe = self.pipe
-            self.pipe = None
+            pipe = NamedPipe.create(self.pipe_name)
+            await pipe.connect()
             return (pipe, self.pipe_name)
 
 
@@ -340,7 +277,8 @@ class Client:
     Supports both Gpg4win-style AF_UNIX emulation and OpenSSH-style AF_UNIX emulation
     """
 
-    def __init__(self, pipe_name):
+    @classmethod
+    async def open(cls, pipe_name):
         """Connects to a socket or named pipe.
 
         If ``pipe_name`` is a byte string, it is interpreted as a Gpg4win-style socket.
@@ -350,46 +288,67 @@ class Client:
         If it is a string, it is interpreted as an OpenSSH-style socket.
         The string contains the name of a Windows named pipe.
         """
+        if isinstance(pipe_name, str):
+            return Client(pipe_name, None, NamedPipe.open(pipe_name))
+        # Read key from file
+        async with await trio.open_file(pipe_name, 'rb') as f:
+            port = io.BytesIO()
+            while True:
+                c = await f.read(1)
+                if not c:
+                    raise OSError('Could not read port for socket {0}'.format(pipe_name))
+                if c == b'\n':
+                    break
+                if c < b'0' or c > b'9':
+                    raise OSError('Could not read port for socket {0}'.format(pipe_name))
+                port.write(c)
+            port = int(port.getvalue())
+            key_len = 0
+            key = io.BytesIO()
+            while key_len < 16:
+                c = await f.read(16-key_len)
+                if not c:
+                    raise OSError('Could not read nonce for socket {0}'.format(pipe_name))
+                key.write(c)
+                key_len += len(c)
+            key = key.getvalue()
+            # Verify end of file
+            c = await f.read(1)
+            if c:
+                raise OSError('Corrupt socket {0}'.format(pipe_name))
+        # GPG simulated socket via localhost socket
+        sock_close = sock = trio.socket.socket()
+        try:
+            await sock.connect(('127.0.0.1', port))
+            await util.send(sock, key)
+            sock_close = None
+            return Client(pipe_name, sock, None)
+        finally:
+            if sock_close:
+                sock_close.close()
+
+    def __enter__(self):
+        """Context manager support."""
+        return self
+
+    def __exit__(self, *_):
+        """Context manager support."""
+        self.close()
+
+    def __init__(self, pipe_name, sock, pipe):
+        """Should not be called directly.
+
+        Use ``Client.open`` instead.
+        """
         self.pipe_name = pipe_name
-        self.sock = None
-        self.pipe = None
-        if not isinstance(self.pipe_name, str):
-            # Read key from file
-            with open(self.pipe_name, 'rb') as f:
-                with ctrl_cancel_async_io(f.fileno()):
-                    port = io.BytesIO()
-                    while True:
-                        c = f.read(1)
-                        if not c:
-                            raise OSError('Could not read port for socket {0}'.format(pipe_name))
-                        if c == b'\n':
-                            break
-                        if c < b'0' or c > b'9':
-                            raise OSError('Could not read port for socket {0}'.format(pipe_name))
-                        port.write(c)
-                    port = int(port.getvalue())
-                    key_len = 0
-                    key = io.BytesIO()
-                    while key:
-                        c = f.read(16-key_len)
-                        if not c:
-                            raise OSError('Could not read nonce for socket {0}'.format(pipe_name))
-                        key.write(c)
-                        key_len += len(c)
-                    key = key.getvalue()
-                    # Verify end of file
-                    c = f.read(1)
-                    if c:
-                        raise OSError('Corrupt socket {0}'.format(pipe_name))
-            # GPG simulated socket via localhost socket
-            sock = socket.socket()
-            sock.connect(('127.0.0.1', port))
-            self.sock = InterruptibleSocket(sock)
-            self.sock.sendall(key)
-        else:
-            self.pipe = NamedPipe.open(pipe_name)
+        self.sock = sock
+        self.pipe = pipe
 
     def __del__(self):
+        """Close the underlying socket or named pipe."""
+        self.close()
+
+    def close(self):
         """Close the underlying socket or named pipe."""
         if self.pipe is not None:
             self.pipe.close()
@@ -398,25 +357,18 @@ class Client:
             self.sock.close()
         self.sock = None
 
-    def settimeout(self, timeout):
-        """Forward to underlying socket or named pipe."""
-        if self.sock:
-            self.sock.settimeout(timeout)
-        if self.pipe:
-            self.pipe.settimeout(timeout)
-
     def getsockname(self):
         """Return the file path or pipe name used for connecting to this named pipe."""
         return self.pipe_name
 
-    def recv(self, size):
+    async def recv(self, size):
         """Forward to underlying socket or named pipe."""
         if self.sock is not None:
-            return self.sock.recv(size)
-        return self.pipe.recv(size)
+            return await self.sock.recv(size)
+        return await self.pipe.recv(size)
 
-    def sendall(self, reply):
+    async def send(self, reply):
         """Forward to underlying socket or named pipe."""
         if self.sock is not None:
-            return self.sock.sendall(reply)
-        return self.pipe.sendall(reply)
+            return await self.sock.send(reply)
+        return await self.pipe.send(reply)
