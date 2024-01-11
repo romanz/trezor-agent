@@ -47,13 +47,14 @@ wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v
 '''
 
 
-def test_make_signature():
-    def signer_func(digest):
+@pytest.mark.trio
+async def test_make_signature():
+    async def signer_func(digest):
         assert digest == (b'\xd0\xe5]|\x8bP\xe6\x91\xb3\xe8+\xf4A\xf0`(\xb1'
                           b'\xc7\xf4;\x86\x97s\xdb\x9a\xda\xee< \xcb\x9e\x00')
         return (7, 8)
 
-    sig = protocol.make_signature(
+    sig = await protocol.make_signature(
         signer_func=signer_func,
         data_to_sign=b'Hello World!',
         public_algo=22,

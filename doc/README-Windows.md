@@ -56,10 +56,18 @@ git clone https://github.com/romanz/trezor-agent.git
 
 Build and install the library:
 ```
+pip install ./trezor-agent
+```
+If you want to be able to edit it without having to rebuild, use this command instead:
+```
 pip install -e trezor-agent
 ```
 
 Build and install the agent of your choice:
+```
+pip install ./trezor-agent/agents/<device>
+```
+If you want to be able to edit it without having to rebuild, use this command instead:
 ```
 pip install -e trezor-agent/agents/<device>
 ```
@@ -166,7 +174,8 @@ choco install gpg4win
 
 You must first create a signing identity:
 ```
-<device>-gpg init -e ed25519 "My Full Name <myemail@mymailhost.com>"
+<device>-gpg init
+<device>-gpg add -d -e ed25519 "My Full Name <myemail@mymailhost.com>"
 ```
 You will be asked for confirmation on your device **twice**.
 

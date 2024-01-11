@@ -17,6 +17,8 @@ PUBKEY_TEXT = ('ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzd'
 
 class MockDevice(device.interface.Device):  # pylint: disable=abstract-method
 
+    fail_sign = False
+
     @classmethod
     def package_name(cls):
         return 'fake-device-agent'
@@ -30,6 +32,8 @@ class MockDevice(device.interface.Device):  # pylint: disable=abstract-method
 
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
+        if MockDevice.fail_sign:
+            raise IOError(42, 'ERROR')
         assert self.conn
         assert blob == BLOB
         return SIG
@@ -49,31 +53,29 @@ SIG = (b'R\x19T\xf2\x84$\xef#\x0e\xee\x04X\xc6\xc3\x99T`\xd1\xd8\xf7!'
        b'\xdc\xf0H\xab\xa8\xac\xa7? \x8f=C\x88N\xe2')
 
 
-def test_ssh_agent():
+@pytest.mark.trio
+async def test_ssh_agent():
     identity = device.interface.Identity(identity_str='localhost:22',
                                          curve_name=CURVE)
-    c = client.Client(device=MockDevice())
-    assert c.export_public_keys([identity]) == [PUBKEY_TEXT]
-    signature = c.sign_ssh_challenge(blob=BLOB, identity=identity)
+    async with await device.ui.UI.create(device_type=MockDevice, config={}) as ui:
+        c = client.Client(ui)
+        assert await c.export_public_keys([identity]) == [PUBKEY_TEXT]
+        signature = await c.sign_ssh_challenge(blob=BLOB, identity=identity)
 
-    key = formats.import_public_key(PUBKEY_TEXT)
-    serialized_sig = key['verifier'](sig=signature, msg=BLOB)
+        key = formats.import_public_key(PUBKEY_TEXT)
+        serialized_sig = key['verifier'](sig=signature, msg=BLOB)
 
-    stream = io.BytesIO(serialized_sig)
-    r = util.read_frame(stream)
-    s = util.read_frame(stream)
-    assert not stream.read()
-    assert r[:1] == b'\x00'
-    assert s[:1] == b'\x00'
-    assert r[1:] + s[1:] == SIG
+        stream = io.BytesIO(serialized_sig)
+        r = util.read_frame(stream)
+        s = util.read_frame(stream)
+        assert not stream.read()
+        assert r[:1] == b'\x00'
+        assert s[:1] == b'\x00'
+        assert r[1:] + s[1:] == SIG
 
-    # pylint: disable=unused-argument
-    def cancel_sign(identity, blob):
-        raise IOError(42, 'ERROR')
-
-    c.device.sign = cancel_sign
-    with pytest.raises(IOError):
-        c.sign_ssh_challenge(blob=BLOB, identity=identity)
+        MockDevice.fail_sign = True
+        with pytest.raises(IOError):
+            await c.sign_ssh_challenge(blob=BLOB, identity=identity)
 
 
 CHALLENGE_BLOB = (
