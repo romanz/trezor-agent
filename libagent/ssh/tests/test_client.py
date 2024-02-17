@@ -101,6 +101,7 @@ def test_parse_ssh_challenge():
                        'fingerprint': '47:a3:26:af:0b:5d:a2:c3:91:ed:26:36:94:be:3a:d5',
                        'type': b'ssh-ed25519'},
         'sshsig': False,
+        'sshcertsign': False,
         'user': b'git',
     }
 
@@ -122,4 +123,5 @@ def test_parse_ssh_signature():
         'namespace': b'file',
         'reserved': b'',
         'sshsig': True,
+        'sshcertsign': False,
     }
