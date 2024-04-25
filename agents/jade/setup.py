@@ -8,6 +8,7 @@ setup(
     author='Jamie C. Driver',
     author_email='jamie@blockstream.com',
     url='http://github.com/romanz/trezor-agent',
+    python_requires='>=3.8',
     scripts=['jade_agent.py'],
     install_requires=[
         'libagent>=0.14.5',
