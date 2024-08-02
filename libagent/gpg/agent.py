@@ -171,8 +171,10 @@ class Handler:
         pubkey = protocol.PublicKey(
             curve_name=curve_name, created=pubkey_dict['created'],
             verifying_key=verifying_key, ecdh=ecdh)
+        if pubkey.keygrip() != keygrip_bytes:
+            log.debug("Derived key didn't match requested keygrip. Probably not our key.")
+            raise KeyError(keygrip)
         assert pubkey.key_id() == pubkey_dict['key_id']
-        assert pubkey.keygrip() == keygrip_bytes
         return identity
 
     def pksign(self, conn):
