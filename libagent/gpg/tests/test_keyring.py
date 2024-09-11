@@ -1,7 +1,7 @@
 import io
 import subprocess
 
-import mock
+import pytest
 
 from .. import keyring
 
@@ -47,22 +47,22 @@ class FakeSocket:
         self.rx = io.BytesIO()
         self.tx = io.BytesIO()
 
-    def recv(self, n):
+    async def recv(self, n):
         return self.rx.read(n)
 
-    def sendall(self, data):
+    async def send(self, data):
         self.tx.write(data)
+        return len(data)
 
 
-def mock_subprocess(output, error=b''):
-    sp = mock.Mock(spec=['Popen', 'PIPE'])
-    p = mock.Mock(spec=['communicate'])
-    sp.Popen.return_value = p
-    p.communicate.return_value = (output, error)
-    return sp
+def mock_run_process(output, error=b''):
+    async def run_process(args, **_):
+        return subprocess.CompletedProcess(args, returncode=0, stdout=output, stderr=error)
+    return run_process
 
 
-def test_sign_digest():
+@pytest.mark.trio
+async def test_sign_digest():
     sock = FakeSocket()
     sock.rx.write(b'OK Pleased to meet you, process XYZ\n')
     sock.rx.write(b'OK\n' * 6)
@@ -70,9 +70,9 @@ def test_sign_digest():
     sock.rx.seek(0)
     keygrip = '1234'
     digest = b'A' * 32
-    sig = keyring.sign_digest(sock=sock, keygrip=keygrip,
-                              digest=digest, sp=mock_subprocess('/dev/pts/0'),
-                              environ={'DISPLAY': ':0'})
+    sig = await keyring.sign_digest(sock=sock, keygrip=keygrip,
+                                    digest=digest, run_process=mock_run_process('/dev/pts/0'),
+                                    environ={'DISPLAY': ':0'})
     assert sig == (0x30313233343536373839414243444546,)
     assert sock.tx.getvalue() == b'''RESET
 OPTION ttyname=/dev/pts/0
@@ -84,18 +84,23 @@ PKSIGN
 '''
 
 
-def test_iterlines():
+@pytest.mark.trio
+async def test_iterlines():
     sock = FakeSocket()
     sock.rx.write(b'foo\nbar\nxyz')
     sock.rx.seek(0)
-    assert list(keyring.iterlines(sock)) == [b'foo', b'bar']
+    assert [line async for line in keyring.iterlines(sock)] == [b'foo', b'bar']
 
 
-def test_get_agent_sock_path():
+@pytest.mark.trio
+async def test_get_agent_sock_path():
     expected_prefix = b'/run/user/'
     expected_suffix = b'/gnupg/S.gpg-agent'
     expected_infix = b'0123456789'
-    value = keyring.get_agent_sock_path(sp=subprocess)
+    expected_if_root = b'/root/.gnupg/S.gpg-agent'  # Use in case tox was executed as root
+    value = await keyring.get_agent_sock_path()
+    if value == expected_if_root:
+        return
     assert value.startswith(expected_prefix)
     assert value.endswith(expected_suffix)
     value = value[len(expected_prefix):-len(expected_suffix)]

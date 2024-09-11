@@ -14,28 +14,28 @@ log = logging.getLogger(__name__)
 class Client:
     """Client wrapper for SSH authentication device."""
 
-    def __init__(self, device):
+    def __init__(self, ui):
         """Connect to hardware device."""
-        self.device = device
+        self.ui = ui
 
-    def export_public_keys(self, identities):
+    async def export_public_keys(self, identities):
         """Export SSH public keys from the device."""
         pubkeys = []
-        with self.device:
+        async with self.ui.device() as device:
             for i in identities:
-                vk = self.device.pubkey(identity=i)
+                vk = await device.pubkey(identity=i)
                 label = i.to_string()
                 pubkey = formats.export_public_key(vk=vk, label=label)
                 pubkeys.append(pubkey)
         return pubkeys
 
-    def sign_ssh_challenge(self, blob, identity):
+    async def sign_ssh_challenge(self, blob, identity):
         """Sign given blob using a private key on the device."""
         log.debug('blob: %r', blob)
         msg = parse_ssh_blob(blob)
         if msg['sshsig']:
             log.info('please confirm "%s" signature for "%s" using %s...',
-                     msg['namespace'], identity.to_string(), self.device)
+                     msg['namespace'], identity.to_string(), self.ui.get_device_name())
         else:
             log.debug('%s: user %r via %r (%r)',
                       msg['conn'], msg['user'], msg['auth'], msg['key_type'])
@@ -46,10 +46,10 @@ class Client:
 
             log.info('please confirm user "%s" login to "%s" using %s...',
                      msg['user'].decode('ascii'), identity.to_string(),
-                     self.device)
+                     self.ui.get_device_name())
 
-        with self.device:
-            return self.device.sign(blob=blob, identity=identity)
+        async with self.ui.device() as device:
+            return await device.sign(blob=blob, identity=identity)
 
 
 def parse_ssh_blob(data):
