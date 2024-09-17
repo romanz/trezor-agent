@@ -6,19 +6,56 @@ import io
 import logging
 import struct
 import sys
-import time
+import threading
+
+import trio
 
 log = logging.getLogger(__name__)
 
 
-def send(conn, data):
+async def send(conn, data):
     """Send data blob to connection socket."""
-    conn.sendall(data)
+    while len(data) > 0:
+        sent = await conn.send(data)
+        if not sent:
+            raise IOError('Socket refused data')
+        data = data[sent:]
+
+
+async def recv_async(conn, size):
+    """
+    Receive bytes from connection socket.
+
+    If size is struct.calcsize()-compatible format, use it to unpack the data.
+    Otherwise, return the plain blob as bytes.
+    """
+    try:
+        fmt = size
+        size = struct.calcsize(fmt)
+    except TypeError:
+        fmt = None
+    try:
+        _read = conn.recv
+    except AttributeError:
+        _read = conn.read
+
+    res = io.BytesIO()
+    while size > 0:
+        buf = await _read(size)
+        if not buf:
+            raise EOFError
+        size = size - len(buf)
+        res.write(buf)
+    res = res.getvalue()
+    if fmt:
+        return struct.unpack(fmt, res)
+    else:
+        return res
 
 
 def recv(conn, size):
     """
-    Receive bytes from connection socket or stream.
+    Receive bytes from in-memory stream.
 
     If size is struct.calcsize()-compatible format, use it to unpack the data.
     Otherwise, return the plain blob as bytes.
@@ -47,8 +84,14 @@ def recv(conn, size):
         return res
 
 
-def read_frame(conn):
+async def read_frame_async(conn):
     """Read size-prefixed frame from connection."""
+    size, = await recv_async(conn, '>L')
+    return await recv_async(conn, size)
+
+
+def read_frame(conn):
+    """Read size-prefixed frame from in-memory stream."""
     size, = recv(conn, '>L')
     return recv(conn, size)
 
@@ -204,13 +247,13 @@ def memoize(func):
     cache = {}
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         """Caching wrapper."""
         key = (args, tuple(sorted(kwargs.items())))
         if key in cache:
             return cache[key]
         else:
-            result = func(*args, **kwargs)
+            result = await func(*args, **kwargs)
             cache[key] = result
             return result
 
@@ -222,13 +265,13 @@ def memoize_method(method):
     cache = {}
 
     @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
+    async def wrapper(self, *args, **kwargs):
         """Caching wrapper."""
         key = (args, tuple(sorted(kwargs.items())))
         if key in cache:
             return cache[key]
         else:
-            result = method(self, *args, **kwargs)
+            result = await method(self, *args, **kwargs)
             cache[key] = result
             return result
 
@@ -236,7 +279,7 @@ def memoize_method(method):
 
 
 @memoize
-def which(cmd):
+async def which(cmd):
     """Return full path to specified command, or raise OSError if missing."""
     try:
         # For Python 3
@@ -244,7 +287,7 @@ def which(cmd):
     except ImportError:
         # For Python 2
         from backports.shutil_which import which as _which
-    full_path = _which(cmd)
+    full_path = await trio.to_thread.run_sync(_which, cmd)
     if full_path is None:
         raise OSError('Cannot find {!r} in $PATH'.format(cmd))
     log.debug('which %r => %r', cmd, full_path)
@@ -286,20 +329,142 @@ def escape_cmd_win(in_str):
 class ExpiringCache:
     """Simple cache with a deadline."""
 
-    def __init__(self, seconds, timer=time.time):
+    def __init__(self, seconds, timer=trio.current_time):
         """C-tor."""
         self.duration = seconds
         self.timer = timer
-        self.value = None
-        self.set(None)
+        self.values = {}
 
-    def get(self):
+    def get(self, key):
         """Returns existing value, or None if deadline has expired."""
-        if self.timer() > self.deadline:
-            self.value = None
-        return self.value
+        curtime = self.timer()
+        self.values = {k: v for k, v in self.values.items() if curtime <= v[0]}
+        return self.values.get(key, (None, None))[1]
 
-    def set(self, value):
+    def set(self, key, value):
         """Set new value and reset the deadline for expiration."""
-        self.deadline = self.timer() + self.duration
-        self.value = value
+        self.values[key] = (
+            self.timer() + self.duration,
+            value
+        )
+
+
+@contextlib.asynccontextmanager
+async def run_on_thread():
+    """Allows running blocking commands from asynchronous context on a single thread."""
+    # pylint: disable=too-many-statements
+    command_condition = threading.Condition()
+    command_value = ()
+    command_in_progress = False
+    thread_is_running = True
+
+    def before_resolve():
+        nonlocal command_condition, command_in_progress
+        with command_condition:
+            command_in_progress = False
+
+    async def run_command(command, *args, **kwargs):
+        nonlocal command_condition, command_value, thread_is_running
+        assert thread_is_running
+        res = _ResultFromThread(before_resolve)
+        with command_condition:
+            assert not command_value
+            command_value = (res, command, args, kwargs)
+            command_condition.notify()
+        return await res.wait()
+
+    async def run_command_immediate(command, *args, **kwargs):
+        nonlocal command_condition, command_value, command_in_progress, thread_is_running
+        assert thread_is_running
+        res = _ResultFromThread(before_resolve)
+        bypass_thread = False
+        with command_condition:
+            if not command_value and not command_in_progress:
+                command_value = (res, command, args, kwargs)
+                command_condition.notify()
+            else:
+                bypass_thread = True
+        if bypass_thread:
+            def run_func():
+                nonlocal command, args, kwargs
+                command(*args, **kwargs)
+            return await trio.to_thread.run_sync(run_func)
+        else:
+            return await res.wait()
+
+    def thread_func():
+        nonlocal command_condition, command_value, command_in_progress
+        while True:
+            with command_condition:
+                while not command_value:
+                    command_condition.wait()
+                command = command_value
+                command_value = ()
+                command_in_progress = True
+            res, func, args, kwargs = command
+            if res is None:
+                break
+            with res:
+                res.resolve(func(*args, **kwargs))
+
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(trio.to_thread.run_sync, thread_func)
+        try:
+            yield run_command, run_command_immediate
+        finally:
+            thread_is_running = False
+            with command_condition:
+                # Abort any in-flight commands, as closing the thread is the highest priority
+                if command_value:
+                    res, = command_value
+                    if res is not None:
+                        res.reject(trio.Cancelled('Thread closed'))
+                command_value = (None, None, None, None)
+                command_condition.notify()
+
+
+class _ResultFromThread:
+    def __init__(self, before_resolve):
+        self.event = trio.Event()
+        self.retval = None
+        self.retiserr = False
+        self.done = False
+        self.before_resolve = before_resolve
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            trio.from_thread.run_sync(self.reject, exc_val)
+        else:
+            # Last chance to resolve
+            trio.from_thread.run_sync(self._resolve, None)
+        return True
+
+    def resolve(self, retval):
+        trio.from_thread.run_sync(self._resolve, retval)
+
+    def _resolve(self, retval):
+        if self.done:
+            return
+        self.done = True
+        self.before_resolve()
+        self.retval = retval
+        self.retiserr = False
+        self.event.set()
+
+    def reject(self, retval):
+        if self.done:
+            return
+        self.done = True
+        self.before_resolve()
+        self.retval = retval
+        self.retiserr = True
+        self.event.set()
+
+    async def wait(self):
+        await self.event.wait()
+        if self.retiserr:
+            raise self.retval
+        return self.retval

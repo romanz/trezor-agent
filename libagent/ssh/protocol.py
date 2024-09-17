@@ -62,7 +62,7 @@ def failure():
     return util.frame(error_msg)
 
 
-def _legacy_pubs(buf):
+async def _legacy_pubs(buf):
     """SSH v1 public keys are not supported."""
     leftover = buf.read()
     if leftover:
@@ -91,7 +91,7 @@ class Handler:
             msg_code('SSH_AGENTC_EXTENSION'): _unsupported_extension,
         }
 
-    def handle(self, msg):
+    async def handle(self, msg):
         """Handle SSH message from the SSH client and return the response."""
         debug_msg = ': {!r}'.format(msg) if self.debug else ''
         log.debug('request: %d bytes%s', len(msg), debug_msg)
@@ -103,15 +103,15 @@ class Handler:
 
         method = self.methods[code]
         log.debug('calling %s()', method.__name__)
-        reply = method(buf=buf)
+        reply = await method(buf=buf)
         debug_reply = ': {!r}'.format(reply) if self.debug else ''
         log.debug('reply: %d bytes%s', len(reply), debug_reply)
         return reply
 
-    def list_pubs(self, buf):
+    async def list_pubs(self, buf):
         """SSH v2 public keys are serialized and returned."""
         assert not buf.read()
-        keys = self.conn.parse_public_keys()
+        keys = await self.conn.parse_public_keys()
         code = util.pack('B', msg_code('SSH2_AGENT_IDENTITIES_ANSWER'))
         num = util.pack('L', len(keys))
         log.debug('available keys: %s', [k['name'] for k in keys])
@@ -120,7 +120,7 @@ class Handler:
         pubs = [util.frame(k['blob']) + util.frame(k['name']) for k in keys]
         return util.frame(code, num, *pubs)
 
-    def sign_message(self, buf):
+    async def sign_message(self, buf):
         """
         SSH v2 public key authentication is performed.
 
@@ -133,7 +133,7 @@ class Handler:
         assert util.read_frame(buf) == b''
         assert not buf.read()
 
-        for k in self.conn.parse_public_keys():
+        for k in await self.conn.parse_public_keys():
             if (k['fingerprint']) == (key['fingerprint']):
                 log.debug('using key %r (%s)', k['name'], k['fingerprint'])
                 key = k
@@ -144,7 +144,7 @@ class Handler:
         label = key['name'].decode('utf-8')
         log.debug('signing %d-byte blob with "%s" key', len(blob), label)
         try:
-            signature = self.conn.sign(blob=blob, identity=key['identity'])
+            signature = await self.conn.sign(blob=blob, identity=key['identity'])
         except IOError:
             return failure()
         except Exception:
@@ -167,6 +167,6 @@ class Handler:
         return util.frame(code, data)
 
 
-def _unsupported_extension(buf):  # pylint: disable=unused-argument
+async def _unsupported_extension(buf):  # pylint: disable=unused-argument
     code = util.pack('B', msg_code('SSH_AGENT_EXTENSION_FAILURE'))
     return util.frame(code)

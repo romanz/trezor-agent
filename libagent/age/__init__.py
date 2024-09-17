@@ -16,6 +16,7 @@ import sys
 
 import bech32
 import pkg_resources
+import trio
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
@@ -37,22 +38,23 @@ def bech32_encode(prefix, data):
     return bech32.bech32_encode(prefix, bech32.convertbits(bytes(data), 8, 5))
 
 
-def run_pubkey(device_type, args):
+async def run_pubkey(device_type, args):
     """Initialize hardware-based GnuPG identity."""
     log.warning('This AGE tool is still in EXPERIMENTAL mode, '
                 'so please note that the API and features may '
                 'change without backwards compatibility!')
 
-    c = client.Client(device=device_type())
-    pubkey = c.pubkey(identity=client.create_identity(args.identity), ecdh=True)
-    recipient = bech32_encode(prefix="age", data=pubkey)
-    print(f"# recipient: {recipient}")
-    print(f"# SLIP-0017: {args.identity}")
-    data = args.identity.encode()
-    encoded = bech32_encode(prefix="age-plugin-trezor-", data=data).upper()
-    decoded = bech32_decode(prefix="age-plugin-trezor-", encoded=encoded)
-    assert decoded.startswith(data)
-    print(encoded)
+    async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
+        c = client.Client(ui=ui)
+        pubkey = await c.pubkey(identity=client.create_identity(args.identity), ecdh=True)
+        recipient = bech32_encode(prefix="age", data=pubkey)
+        print(f"# recipient: {recipient}")
+        print(f"# SLIP-0017: {args.identity}")
+        data = args.identity.encode()
+        encoded = bech32_encode(prefix="age-plugin-trezor-", data=data).upper()
+        decoded = bech32_decode(prefix="age-plugin-trezor-", encoded=encoded)
+        assert decoded.startswith(data)
+        print(encoded)
 
 
 def base64_decode(encoded: str) -> bytes:
@@ -86,48 +88,48 @@ def decrypt(key, encrypted):
         return None
 
 
-def run_decrypt(device_type, args):
+async def run_decrypt(device_type, args):
     """Unlock hardware device (for future interaction)."""
     # pylint: disable=too-many-locals
-    c = client.Client(device=device_type())
+    async with await device.ui.UI.create(device_type=device_type, config=vars(args)) as ui:
+        c = client.Client(ui=ui)
 
-    lines = (line.strip() for line in sys.stdin)  # strip whitespace
-    lines = (line for line in lines if line)  # skip empty lines
+        lines = (line.strip() for line in sys.stdin)  # strip whitespace
+        lines = (line for line in lines if line)  # skip empty lines
 
-    identities = []
-    stanza_map = {}
+        identities = []
+        stanza_map = {}
 
-    for line in lines:
-        log.debug("got %r", line)
-        if line == "-> done":
-            break
+        for line in lines:
+            log.debug("got %r", line)
+            if line == "-> done":
+                break
 
-        if line.startswith("-> add-identity "):
-            encoded = line.split(" ")[-1].lower()
-            data = bech32_decode("age-plugin-trezor-", encoded)
-            identity = client.create_identity(data.decode())
-            identities.append(identity)
+            if line.startswith("-> add-identity "):
+                encoded = line.split(" ")[-1].lower()
+                data = bech32_decode("age-plugin-trezor-", encoded)
+                identity = client.create_identity(data.decode())
+                identities.append(identity)
 
-        elif line.startswith("-> recipient-stanza "):
-            file_index, tag, *args = line.split(" ")[2:]
-            body = next(lines)
-            if tag != "X25519":
-                continue
+            elif line.startswith("-> recipient-stanza "):
+                file_index, tag, *args = line.split(" ")[2:]
+                body = next(lines)
+                if tag != "X25519":
+                    continue
 
-            peer_pubkey = base64_decode(args[0])
-            encrypted = base64_decode(body)
-            stanza_map.setdefault(file_index, []).append((peer_pubkey, encrypted))
+                peer_pubkey = base64_decode(args[0])
+                encrypted = base64_decode(body)
+                stanza_map.setdefault(file_index, []).append((peer_pubkey, encrypted))
 
-    for file_index, stanzas in stanza_map.items():
-        _handle_single_file(file_index, stanzas, identities, c)
+        for file_index, stanzas in stanza_map.items():
+            await _handle_single_file(file_index, stanzas, identities, c, ui.get_device_name())
 
-    sys.stdout.buffer.write('-> done\n\n'.encode())
-    sys.stdout.flush()
-    sys.stdout.close()
+        sys.stdout.buffer.write('-> done\n\n'.encode())
+        sys.stdout.flush()
+        sys.stdout.close()
 
 
-def _handle_single_file(file_index, stanzas, identities, c):
-    d = c.device.__class__.__name__
+async def _handle_single_file(file_index, stanzas, identities, c, d):
     for peer_pubkey, encrypted in stanzas:
         for identity in identities:
             id_str = identity.to_string()
@@ -135,7 +137,7 @@ def _handle_single_file(file_index, stanzas, identities, c):
             sys.stdout.buffer.write(f'-> msg\n{msg}\n'.encode())
             sys.stdout.flush()
 
-            key = c.ecdh(identity=identity, peer_pubkey=peer_pubkey)
+            key = await c.ecdh(identity=identity, peer_pubkey=peer_pubkey)
             result = decrypt(key=key, encrypted=encrypted)
             if not result:
                 continue
@@ -167,13 +169,11 @@ def main(device_type):
 
     log.debug("starting age plugin: %s", args)
 
-    device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
-
     try:
         if args.identity:
-            run_pubkey(device_type=device_type, args=args)
+            trio.run(run_pubkey, device_type, args)
         elif args.age_plugin == 'identity-v1':
-            run_decrypt(device_type=device_type, args=args)
+            trio.run(run_decrypt, device_type, args)
         else:
             log.error("Unsupported state machine: %r", args.age_plugin)
     except Exception as e:  # pylint: disable=broad-except

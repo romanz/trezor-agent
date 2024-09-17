@@ -26,7 +26,6 @@ class Trezor(interface.Device):
 
     required_version = '>=1.4.0'
 
-    ui = None  # can be overridden by device's users
     cached_session_id = None
 
     def _verify_version(self, connection):

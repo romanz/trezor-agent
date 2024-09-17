@@ -8,7 +8,7 @@ from . import decode, keyring, protocol
 log = logging.getLogger(__name__)
 
 
-def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
+async def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
     """Export new primary GPG public key, ready for "gpg2 --import"."""
     pubkey_packet = protocol.packet(tag=(5 if secret_bytes else 6),
                                     blob=pubkey.data() + secret_bytes)
@@ -36,7 +36,7 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
         protocol.subpacket(16, pubkey.key_id()),  # issuer key id
         protocol.CUSTOM_SUBPACKET]
 
-    signature = protocol.make_signature(
+    signature = await protocol.make_signature(
         signer_func=signer_func,
         public_algo=pubkey.algo_id,
         data_to_sign=data_to_sign,
@@ -48,7 +48,7 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
     return pubkey_packet + user_id_packet + sign_packet
 
 
-def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
+async def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
     """Export new subkey to GPG primary key."""
     subkey_packet = protocol.packet(tag=(7 if secret_bytes else 14),
                                     blob=subkey.data() + secret_bytes)
@@ -65,7 +65,7 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
             protocol.subpacket_time(subkey.created)]  # signature time
         unhashed_subpackets = [
             protocol.subpacket(16, subkey.key_id())]  # issuer key id
-        embedded_sig = protocol.make_signature(
+        embedded_sig = await protocol.make_signature(
             signer_func=signer_func,
             data_to_sign=data_to_sign,
             public_algo=subkey.algo_id,
@@ -90,9 +90,9 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
     unhashed_subpackets.append(protocol.CUSTOM_SUBPACKET)
 
     if not decode.has_custom_subpacket(signature):
-        signer_func = keyring.create_agent_signer(user_id['value'])
+        signer_func = await keyring.create_agent_signer(user_id['value'])
 
-    signature = protocol.make_signature(
+    signature = await protocol.make_signature(
         signer_func=signer_func,
         data_to_sign=data_to_sign,
         public_algo=primary['algo'],
