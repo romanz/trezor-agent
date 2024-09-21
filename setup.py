@@ -8,6 +8,7 @@ setup(
     author='Roman Zeyde',
     author_email='dev@romanzey.de',
     url='http://github.com/romanz/trezor-agent',
+    python_requires='>=3.8',
     packages=[
         'libagent',
         'libagent.age',

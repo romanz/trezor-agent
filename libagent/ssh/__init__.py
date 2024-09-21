@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from importlib import metadata
 
 import configargparse
 
@@ -21,7 +22,6 @@ try:
     import daemon
 except ImportError:
     daemon = None
-import pkg_resources
 
 from .. import device, formats, server, util
 from . import client, protocol
@@ -83,9 +83,8 @@ def create_agent_parser(device_type):
     p.add_argument('-v', '--verbose', default=0, action='count')
 
     agent_package = device_type.package_name()
-    resources_map = {r.key: r for r in pkg_resources.require(agent_package)}
-    resources = [resources_map[agent_package], resources_map['libagent']]
-    versions = '\n'.join('{}={}'.format(r.key, r.version) for r in resources)
+    resources = [metadata.distribution(agent_package), metadata.distribution('libagent')]
+    versions = '\n'.join('{}={}'.format(r.metadata['Name'], r.version) for r in resources)
     p.add_argument('--version', help='print the version info',
                    action='version', version=versions)
 

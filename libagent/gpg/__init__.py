@@ -17,13 +17,13 @@ import re
 import stat
 import subprocess
 import sys
+from importlib import metadata
 
 try:
     # TODO: Not supported on Windows. Use daemoniker instead?
     import daemon
 except ImportError:
     daemon = None
-import pkg_resources
 import semver
 
 from .. import device, formats, server, util
@@ -308,9 +308,8 @@ def main(device_type):
     parser = argparse.ArgumentParser(epilog=epilog)
 
     agent_package = device_type.package_name()
-    resources_map = {r.key: r for r in pkg_resources.require(agent_package)}
-    resources = [resources_map[agent_package], resources_map['libagent']]
-    versions = '\n'.join('{}={}'.format(r.key, r.version) for r in resources)
+    resources = [metadata.distribution(agent_package), metadata.distribution('libagent')]
+    versions = '\n'.join('{}={}'.format(r.metadata['Name'], r.version) for r in resources)
     parser.add_argument('--version', help='print the version info',
                         action='version', version=versions)
 

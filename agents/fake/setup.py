@@ -11,6 +11,7 @@ setup(
     author='Roman Zeyde',
     author_email='dev@romanzey.de',
     url='http://github.com/romanz/trezor-agent',
+    python_requires='>=3.8',
     scripts=['fake_device_agent.py'],
     install_requires=[
         'libagent>=0.9.0',
