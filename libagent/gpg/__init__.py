@@ -14,9 +14,11 @@ import functools
 import logging
 import os
 import re
+import shlex
 import stat
 import subprocess
 import sys
+import textwrap
 
 try:
     # TODO: Not supported on Windows. Use daemoniker instead?
@@ -152,26 +154,33 @@ def run_init(device_type, args):
     agent_path = util.which('{}-gpg-agent'.format(device_name))
 
     # Prepare GPG agent invocation script (to pass the PATH from environment).
+    extra_options = {}
+    for arg in ['pin_entry_binary', 'passphrase_entry_binary', 'cache_expiry_seconds']:
+        if hasattr(args, arg):
+            extra_options[arg.replace('_', '-')] = getattr(args, arg)
     with open(os.path.join(homedir, ('run-agent.sh'
                                      if sys.platform != 'win32' else
                                      'run-agent.bat')), 'w') as f:
         if sys.platform != 'win32':
-            f.write(r"""#!/bin/sh
-export PATH="{0}"
-""".format(util.escape_cmd_quotes(os.environ['PATH'])))
+            quoted_extra_args = shlex.join(
+                f"--{name}={value}" for name, value in extra_options.items()
+            )
+            f.write(textwrap.dedent(rf"""
+                #!/bin/sh
+                export PATH={shlex.quote(os.environ['PATH'])}
+                exec {shlex.quote(agent_path)} -vv {quoted_extra_args} "$@"
+                """
+            ).lstrip())
         else:
-            f.write(r"""@echo off
-set PATH={0}
-""".format(util.escape_cmd_win(os.environ['PATH'])))
-        f.write('"{0}" -vv'.format(util.escape_cmd_quotes(agent_path)))
-        for arg in ['pin_entry_binary', 'passphrase_entry_binary', 'cache_expiry_seconds']:
-            if hasattr(args, arg):
-                f.write(' "--{0}={1}"'.format(arg.replace('_', '-'),
-                                              util.escape_cmd_quotes(getattr(args, arg))))
-        if sys.platform != 'win32':
-            f.write(' $*\n')
-        else:
-            f.write(' %*\n')
+            quoted_extra_args = " ".join(
+                f"--{name}={util.escape_cmd_quotes(str(value))}"
+                for name, value in extra_options.items()
+            )
+            f.write(textwrap.dedent(rf"""
+                @echo off
+                set PATH={util.escape_cmd_win(os.environ['PATH'])}
+                {util.escape_cmd_quotes(agent_path)} -vv {quoted_extra_args} %*
+            """).lstrip())
     os.chmod(f.name, 0o700)
     run_agent_script = f.name
 
@@ -185,17 +194,17 @@ default-key {1}
 
     # Prepare a helper script for setting up the new identity
     with open(os.path.join(homedir, 'env'), 'w') as f:
-        f.write("""#!/bin/bash
+        f.write("""#!/bin/sh
 set -eu
-export GNUPGHOME={0}
-COMMAND=$*
-if [ -z "${{COMMAND}}" ]
+GNUPGHOME={0}
+export GNUPGHOME
+if [ -z "$*" ]
 then
-    ${{SHELL}}
+    exec "$SHELL"
 else
-    ${{COMMAND}}
+    exec "$@"
 fi
-""".format(homedir))
+""".format(shlex.quote(homedir)))
     os.chmod(f.name, 0o700)
 
     # Generate new GPG identity and import into GPG keyring
