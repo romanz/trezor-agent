@@ -49,11 +49,11 @@ class UI:
             binary=self.pin_entry_binary,
             options=self.options_getter())
 
-    def get_passphrase(self, prompt='Passphrase:', available_on_device=False):
+    def get_passphrase(self, prompt='Passphrase:', description=None, available_on_device=False):
         """Ask the user for passphrase."""
         passphrase = None
         if self.cached_passphrase_ack:
-            passphrase = self.cached_passphrase_ack.get()
+            passphrase = self.cached_passphrase_ack.get(prompt)
         if passphrase is None:
             env_passphrase = os.environ.get("TREZOR_PASSPHRASE")
             if env_passphrase is not None:
@@ -64,11 +64,11 @@ class UI:
                 passphrase = interact(
                     title='{} passphrase'.format(self.device_name),
                     prompt=prompt,
-                    description=None,
+                    description=description,
                     binary=self.passphrase_entry_binary,
                     options=self.options_getter())
         if self.cached_passphrase_ack:
-            self.cached_passphrase_ack.set(passphrase)
+            self.cached_passphrase_ack.set(prompt, passphrase)
         return passphrase
 
     def button_request(self, _code=None):

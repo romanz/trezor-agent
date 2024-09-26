@@ -37,7 +37,7 @@ def export_public_key(device_type, args):
     log.warning('NOTE: in order to re-generate the exact same GPG key later, '
                 'run this command with "--time=%d" commandline flag (to set '
                 'the timestamp of the GPG key manually).', args.time)
-    c = client.Client(device=device_type())
+    c = client.Client(device=device_type(args))
     identity = client.create_identity(user_id=args.user_id,
                                       curve_name=args.ecdsa_curve)
     verifying_key = c.pubkey(identity=identity, ecdh=False)
@@ -217,7 +217,7 @@ fi
 def run_unlock(device_type, args):
     """Unlock hardware device (for future interaction)."""
     util.setup_logging(verbosity=args.verbose)
-    with device_type() as d:
+    with device_type(args) as d:
         log.info('unlocked %s device', d)
 
 
@@ -237,6 +237,7 @@ def _server_from_sock_path(env):
 def run_agent(device_type):
     """Run a simple GPG-agent server."""
     p = argparse.ArgumentParser()
+    device_type.setup_arg_parser(p)
     p.add_argument('--homedir', default=os.environ.get('GNUPGHOME'))
     p.add_argument('-v', '--verbose', default=0, action='count')
     p.add_argument('--server', default=False, action='store_true',
@@ -276,7 +277,7 @@ def run_agent_internal(args, device_type):
         pubkey_bytes = keyring.export_public_keys(env=env)
         device_type.ui = device.ui.UI(device_type=device_type,
                                       config=vars(args))
-        handler = agent.Handler(device=device_type(),
+        handler = agent.Handler(device=device_type(args),
                                 pubkey_bytes=pubkey_bytes)
 
         sock_server = _server_from_assuan_fd(os.environ)
@@ -306,6 +307,7 @@ def main(device_type):
     epilog = ('See https://github.com/romanz/trezor-agent/blob/master/'
               'doc/README-GPG.md for usage examples.')
     parser = argparse.ArgumentParser(epilog=epilog)
+    device_type.setup_arg_parser(parser)
 
     agent_package = device_type.package_name()
     resources_map = {r.key: r for r in pkg_resources.require(agent_package)}

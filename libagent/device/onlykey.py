@@ -28,6 +28,10 @@ class OnlyKey(interface.Device):
         """Python package name (at PyPI)."""
         return 'onlykey-agent'
 
+    @classmethod
+    def setup_arg_parser(cls, parser):
+        """Add device-specific parameters to the argument parser."""
+
     @property
     def _defs(self):
         from . import onlykey_defs
