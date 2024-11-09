@@ -10,7 +10,7 @@ import ecdsa
 import nacl.signing
 
 from .. import util
-from . import protocol
+from . import keystore, protocol
 
 log = logging.getLogger(__name__)
 
@@ -95,12 +95,6 @@ def _parse_embedded_signatures(subpackets):
             yield _parse_signature(util.Reader(stream))
 
 
-def has_custom_subpacket(signature_packet):
-    """Detect our custom public keys by matching subpacket data."""
-    return any(protocol.CUSTOM_KEY_LABEL == subpacket[1:]
-               for subpacket in signature_packet['unhashed_subpackets'])
-
-
 def _parse_signature(stream):
     """See https://tools.ietf.org/html/rfc4880#section-5.2 for details."""
     p = {'type': 'signature'}
@@ -166,7 +160,8 @@ def _parse_pubkey(stream, packet_type='pubkey'):
                 p['secret'] = leftover.read()
 
             parse_func, keygrip_func = SUPPORTED_CURVES[oid]
-            keygrip = keygrip_func(parse_func(mpi))
+            p['verifying_key'] = parse_func(mpi)
+            keygrip = keygrip_func(p['verifying_key'])
             log.debug('keygrip: %s', util.hexlify(keygrip))
             p['keygrip'] = keygrip
 
@@ -293,16 +288,6 @@ def _parse_pubkey_packets(pubkey_bytes):
     return packets_per_pubkey
 
 
-def load_by_keygrip(pubkey_bytes, keygrip):
-    """Return public key and first user ID for specified keygrip."""
-    for packets in _parse_pubkey_packets(pubkey_bytes):
-        user_ids = [p for p in packets if p['type'] == 'user_id']
-        for p in packets:
-            if p.get('keygrip') == keygrip:
-                return p, user_ids
-    raise KeyError('{} keygrip not found'.format(util.hexlify(keygrip)))
-
-
 def iter_keygrips(pubkey_bytes):
     """Iterate over all keygrips in this pubkey."""
     for packets in _parse_pubkey_packets(pubkey_bytes):
@@ -310,6 +295,25 @@ def iter_keygrips(pubkey_bytes):
             keygrip = p.get('keygrip')
             if keygrip:
                 yield keygrip
+
+
+async def identity_for_key(client, pubkey_bytes, homedir):
+    """Returns the identity used to produce the associated primary key.
+
+    If a key matching the specified public key is not found in the keystore, ``None`` is returned.
+    """
+    packets = parse_packets(io.BytesIO(pubkey_bytes))
+    pubkey_dict = next(packets, None)
+    if pubkey_dict is None or pubkey_dict['type'] != 'pubkey' or 'verifying_key' not in pubkey_dict:
+        return None
+    try:
+        key = await keystore.load_key(client, pubkey_dict['keygrip'], homedir)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    # Check that it's the same key
+    if key['pubkey'].data_to_hash() != pubkey_dict['_to_hash']:
+        return None
+    return key['identity']
 
 
 def load_signature(stream, original_data):
@@ -326,7 +330,7 @@ def remove_armor(armored_data):
     """Decode armored data into its binary form."""
     stream = io.BytesIO(armored_data)
     lines = stream.readlines()[3:-1]
-    data = base64.b64decode(b''.join(lines))
-    payload, checksum = data[:-3], data[-3:]
+    payload = base64.b64decode(b''.join(lines[:-1]))
+    checksum = base64.b64decode(lines[-1])
     assert util.crc24(payload) == checksum
     return payload

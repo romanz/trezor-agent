@@ -18,7 +18,8 @@ Thanks!
     Run
 
     ```
-    $ (trezor|keepkey|ledger|jade|onlykey)-gpg init "Roman Zeyde <roman.zeyde@gmail.com>"
+    $ (trezor|keepkey|ledger|jade|onlykey)-gpg init
+    $ (trezor|keepkey|ledger|jade|onlykey)-gpg add -d "Roman Zeyde <roman.zeyde@gmail.com>"
     ```
 
     Follow the instructions provided to complete the setup.  Keep note of the timestamp value which you'll need if you want to regenerate the key later.
@@ -137,13 +138,14 @@ $ gpg2 --export 'john@doe.bit' | gpg2 --list-packets | grep created | head -n1
 
 After your main identity is created, you can add new user IDs using the regular GnuPG commands:
 ```
-$ trezor-gpg init "Foobar" -vv
+$ trezor-gpg init
+$ trezor-gpg add -d "Foobar" -vv
 $ export GNUPGHOME=${HOME}/.gnupg/trezor
 $ gpg2 -K
 ------------------------------------------
-sec   nistp256/6275E7DA 2017-12-05 [SC]
+sec   nistp256/6275E7DA 1970-01-01 [SC]
 uid         [ultimate] Foobar
-ssb   nistp256/35F58F26 2017-12-05 [E]
+ssb   nistp256/35F58F26 1970-01-01 [E]
 
 $ gpg2 --edit Foobar
 gpg> adduid
@@ -159,10 +161,24 @@ gpg> save
 
 $ gpg2 -K
 ------------------------------------------
-sec   nistp256/6275E7DA 2017-12-05 [SC]
+sec   nistp256/6275E7DA 1970-01-01 [SC]
 uid         [ultimate] Xyzzy
 uid         [ultimate] Foobar
-ssb   nistp256/35F58F26 2017-12-05 [E]
+ssb   nistp256/35F58F26 1970-01-01 [E]
+```
+
+This adds new user IDs to the same key. You can also add a new key using the `add` command:
+```
+$ trezor-gpg add "Xyzzy" -vv
+$ gpg2 -K
+------------------------------------------
+sec   nistp256/6275E7DA 1970-01-01 [SC]
+uid         [ultimate] Foobar
+ssb   nistp256/35F58F26 1970-01-01 [E]
+
+sec   nistp256/BE61C208 1970-01-01 [SC]
+uid         [ultimate] Xyzzy
+ssb   nistp256/65088366 1970-01-01 [E]
 ```
 
 ### Generate GnuPG subkeys
@@ -173,7 +189,17 @@ pub   rsa2048/90C4064B 2017-10-10 [SC]
 uid         [ultimate] foobar
 sub   rsa2048/4DD05FF0 2017-10-10 [E]
 
-$ trezor-gpg init "foobar" --subkey
+$ trezor-gpg add "foobar" --subkey
+```
+
+If you have already set the new folder as your default profile, and you want to add the subkey to an existing GnuPG from a previous (e.g. non-hardware) profile, you can specify the previous profile location using `--primary-homedir`:
+```
+$ gpg2 -k foobar --homedir ~/.gnupg
+pub   rsa2048/90C4064B 2017-10-10 [SC]
+uid         [ultimate] foobar
+sub   rsa2048/4DD05FF0 2017-10-10 [E]
+
+$ trezor-gpg add "foobar" --subkey --primary-homedir ~/.gnupg
 ```
 
 [![asciicast](https://asciinema.org/a/Ick5G724zrZRFsGY7ZUdFSnV1.png)](https://asciinema.org/a/Ick5G724zrZRFsGY7ZUdFSnV1)

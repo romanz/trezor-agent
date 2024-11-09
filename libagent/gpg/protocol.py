@@ -174,10 +174,6 @@ SUPPORTED_CURVES = {
 
 ECDH_ALGO_ID = 18
 
-CUSTOM_KEY_LABEL = b'TREZOR-GPG'  # marks "our" pubkey
-CUSTOM_SUBPACKET_ID = 26  # use "policy URL" subpacket
-CUSTOM_SUBPACKET = subpacket(CUSTOM_SUBPACKET_ID, CUSTOM_KEY_LABEL)
-
 
 def get_curve_name_by_oid(oid):
     """Return curve name matching specified OID, or raise KeyError."""
@@ -254,8 +250,8 @@ def armor(blob, type_str):
     return head + _split_lines(body, 64) + '=' + checksum + '\n' + tail
 
 
-def make_signature(signer_func, data_to_sign, public_algo,
-                   hashed_subpackets, unhashed_subpackets, sig_type=0):
+async def make_signature(signer_func, data_to_sign, public_algo,
+                         hashed_subpackets, unhashed_subpackets, sig_type=0):
     """Create new GPG signature."""
     # pylint: disable=too-many-arguments
     header = struct.pack('>BBBB',
@@ -271,7 +267,7 @@ def make_signature(signer_func, data_to_sign, public_algo,
     log.debug('hashing %d bytes', len(data_to_hash))
     digest = hashlib.sha256(data_to_hash).digest()
     log.debug('signing digest: %s', util.hexlify(digest))
-    params = signer_func(digest=digest)
+    params = await signer_func(digest=digest)
     sig = b''.join(mpi(p) for p in params)
 
     return bytes(header + hashed + unhashed +

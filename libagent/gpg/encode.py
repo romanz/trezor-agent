@@ -3,12 +3,12 @@ import io
 import logging
 
 from .. import util
-from . import decode, keyring, protocol
+from . import decode, protocol
 
 log = logging.getLogger(__name__)
 
 
-def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
+async def create_primary(user_id, pubkey, signer_func, flags, secret_bytes=b''):
     """Export new primary GPG public key, ready for "gpg2 --import"."""
     pubkey_packet = protocol.packet(tag=(5 if secret_bytes else 6),
                                     blob=pubkey.data() + secret_bytes)
@@ -21,7 +21,7 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.7
         protocol.subpacket_byte(0x0B, 9),  # preferred symmetric algo (AES-256)
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.4
-        protocol.subpacket_byte(0x1B, 1 | 2),  # key flags (certify & sign)
+        protocol.subpacket_byte(0x1B, flags),  # key flags
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.21
         protocol.subpacket_bytes(0x15, [8, 9, 10]),  # preferred hash
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.8
@@ -32,11 +32,9 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
         protocol.subpacket_byte(0x1E, 0x01),  # advanced features (MDC)
         # https://tools.ietf.org/html/rfc4880#section-5.2.3.24
     ]
-    unhashed_subpackets = [
-        protocol.subpacket(16, pubkey.key_id()),  # issuer key id
-        protocol.CUSTOM_SUBPACKET]
+    unhashed_subpackets = [protocol.subpacket(16, pubkey.key_id())]  # issuer key id
 
-    signature = protocol.make_signature(
+    signature = await protocol.make_signature(
         signer_func=signer_func,
         public_algo=pubkey.algo_id,
         data_to_sign=data_to_sign,
@@ -48,12 +46,13 @@ def create_primary(user_id, pubkey, signer_func, secret_bytes=b''):
     return pubkey_packet + user_id_packet + sign_packet
 
 
-def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
+async def create_subkey(primary_bytes, subkey, signer_func, flags, secret_bytes=b''):
     """Export new subkey to GPG primary key."""
+    # pylint: disable=too-many-arguments
     subkey_packet = protocol.packet(tag=(7 if secret_bytes else 14),
                                     blob=subkey.data() + secret_bytes)
-    packets = list(decode.parse_packets(io.BytesIO(primary_bytes)))
-    primary, user_id, signature = packets[:3]
+    primary = next(decode.parse_packets(io.BytesIO(primary_bytes)))
+    assert primary['type'] == 'pubkey'
 
     data_to_sign = primary['_to_hash'] + subkey.data_to_hash()
 
@@ -65,7 +64,7 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
             protocol.subpacket_time(subkey.created)]  # signature time
         unhashed_subpackets = [
             protocol.subpacket(16, subkey.key_id())]  # issuer key id
-        embedded_sig = protocol.make_signature(
+        embedded_sig = await protocol.make_signature(
             signer_func=signer_func,
             data_to_sign=data_to_sign,
             public_algo=subkey.algo_id,
@@ -75,10 +74,6 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
 
     # Subkey Binding Signature
 
-    # Key flags: https://tools.ietf.org/html/rfc4880#section-5.2.3.21
-    # (certify & sign)                   (encrypt)
-    flags = (2) if (not subkey.ecdh) else (4 | 8)
-
     hashed_subpackets = [
         protocol.subpacket_time(subkey.created),  # signature time
         protocol.subpacket_byte(0x1B, flags)]
@@ -87,12 +82,8 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
     unhashed_subpackets.append(protocol.subpacket(16, primary['key_id']))
     if embedded_sig is not None:
         unhashed_subpackets.append(protocol.subpacket(32, embedded_sig))
-    unhashed_subpackets.append(protocol.CUSTOM_SUBPACKET)
 
-    if not decode.has_custom_subpacket(signature):
-        signer_func = keyring.create_agent_signer(user_id['value'])
-
-    signature = protocol.make_signature(
+    signature = await protocol.make_signature(
         signer_func=signer_func,
         data_to_sign=data_to_sign,
         public_algo=primary['algo'],

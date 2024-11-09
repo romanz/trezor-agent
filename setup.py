@@ -31,6 +31,8 @@ setup(
         'pymsgbox>=1.0.6',
         'semver>=2.2',
         'unidecode>=0.4.20',
+        'trio>=0.22.2',
+        'trio-util>=0.7.0',
         'pywin32>=300;sys_platform=="win32"'
     ],
     platforms=['POSIX', 'win32'],

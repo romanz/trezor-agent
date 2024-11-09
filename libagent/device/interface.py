@@ -105,9 +105,10 @@ class Identity:
 class Device:
     """Abstract cryptographic hardware device interface."""
 
-    def __init__(self):
+    def __init__(self, ui):
         """C-tor."""
         self.conn = None
+        self.ui = ui
 
     def connect(self):
         """Connect to device, otherwise raise NotFoundError."""
