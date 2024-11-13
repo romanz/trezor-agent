@@ -6,7 +6,7 @@ It is used for getting SSH public keys and ECDSA signing of server requests.
 import io
 import logging
 
-from . import formats, util
+from . import certificate, formats, util
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +36,15 @@ class Client:
         if msg['sshsig']:
             log.info('please confirm "%s" signature for "%s" using %s...',
                      msg['namespace'], identity.to_string(), self.device)
+        elif msg['sshcertsign']:
+            entity = 'unknown'
+            if msg['certificate_type'] == 1:
+                entity = 'user'
+            elif msg['certificate_type'] == 2:
+                entity = 'host'
+            log.info('please confirm signing public key for %s "%s" with "%s" using %s...',
+                     entity, msg['principals'], identity.to_string(),
+                     self.device)
         else:
             log.debug('%s: user %r via %r (%r)',
                       msg['conn'], msg['user'], msg['auth'], msg['key_type'])
@@ -59,22 +68,31 @@ def parse_ssh_blob(data):
         i = io.BytesIO(data[6:])
         # https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.sshsig
         res['sshsig'] = True
+        res['sshcertsign'] = False
         res['namespace'] = util.read_frame(i)
         res['reserved'] = util.read_frame(i)
         res['hashalg'] = util.read_frame(i)
         res['message'] = util.read_frame(i)
     else:
-        i = io.BytesIO(data)
         res['sshsig'] = False
-        res['nonce'] = util.read_frame(i)
-        i.read(1)  # SSH2_MSG_USERAUTH_REQUEST == 50 (from ssh2.h, line 108)
-        res['user'] = util.read_frame(i)
-        res['conn'] = util.read_frame(i)
-        res['auth'] = util.read_frame(i)
-        i.read(1)  # have_sig == 1 (from sshconnect2.c, line 1056)
-        res['key_type'] = util.read_frame(i)
-        public_key = util.read_frame(i)
-        res['public_key'] = formats.parse_pubkey(public_key)
+        _certificate = certificate.parse(data)
+        if _certificate['isCertificate']:
+            certificate.format(_certificate)
+            _certificate['sshsig'] = res['sshsig']
+            _certificate['sshcertsign'] = True
+            return _certificate
+        else:
+            res['sshcertsign'] = False
+            i = io.BytesIO(data)
+            res['nonce'] = util.read_frame(i)
+            i.read(1)  # SSH2_MSG_USERAUTH_REQUEST == 50 (from ssh2.h, line 108)
+            res['user'] = util.read_frame(i)
+            res['conn'] = util.read_frame(i)
+            res['auth'] = util.read_frame(i)
+            i.read(1)  # have_sig == 1 (from sshconnect2.c, line 1056)
+            res['key_type'] = util.read_frame(i)
+            public_key = util.read_frame(i)
+            res['public_key'] = formats.parse_pubkey(public_key)
 
     unparsed = i.read()
     if unparsed:
