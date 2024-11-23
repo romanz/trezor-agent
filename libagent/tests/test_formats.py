@@ -60,7 +60,7 @@ _public_key_ed25519_cert = (
     'E2VjZHNhLXNoYTItbmlzdHAyNTYAAABIAAAAICUMX1taTy6'
     'y+1Aa1m7kXHI/Qv7ZZIeNp7ndmCRLFCSuAAAAIBaX43k0Ye'
     'Bk8a5zp6FyFCBYVOtis/DUbGm07d7miPnE '
-    'hello\n'
+    'hello world\n'
 )
 
 _public_key_ed25519_cert_BLOB = (
@@ -139,7 +139,7 @@ def test_parse_ed25519():
 
 def test_parse_ed25519_cert():
     p = formats.import_public_key(_public_key_ed25519_cert)
-    assert p['name'] == b'hello'
+    assert p['name'] == b'hello world'
     assert p['curve'] == 'ed25519'
 
     assert p['blob'] == _public_key_ed25519_cert_BLOB

@@ -225,7 +225,7 @@ def export_public_key(vk, label):
 def import_public_key(line):
     """Parse public key textual format, as saved at a .pub file."""
     log.debug('loading SSH public key: %r', line)
-    file_type, base64blob, name = line.split()
+    file_type, base64blob, name = line.strip().split(maxsplit=2)
     blob = base64.b64decode(base64blob)
     result = parse_pubkey(blob)
     result['name'] = name.encode('utf-8')
