@@ -89,8 +89,8 @@ def create_subkey(primary_bytes, subkey, signer_func, secret_bytes=b''):
         unhashed_subpackets.append(protocol.subpacket(32, embedded_sig))
     unhashed_subpackets.append(protocol.CUSTOM_SUBPACKET)
 
-    if not decode.has_custom_subpacket(signature):
-        signer_func = keyring.create_agent_signer(user_id['value'])
+    # Allow signing with existing GnuPG keyring (for adding TREZOR-based subkeys)
+    signer_func = keyring.create_agent_signer(user_id['value'])
 
     signature = protocol.make_signature(
         signer_func=signer_func,
