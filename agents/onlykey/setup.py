@@ -8,6 +8,7 @@ setup(
     author='CryptoTrust',
     author_email='t@crp.to',
     url='http://github.com/trustcrypto/onlykey-agent',
+    python_requires='>=3.8',
     scripts=['onlykey_agent.py'],
     install_requires=[
         'libagent>=0.14.2',
