@@ -28,10 +28,6 @@ agents to interact with several different hardware devices:
 * [`keepkey_agent`](https://pypi.org/project/keepkey_agent/): Using KeepKey as hardware-based SSH/PGP agent
 * [`onlykey-agent`](https://pypi.org/project/onlykey-agent/): Using OnlyKey as hardware-based SSH/PGP agent
 
-
-The [/releases](/releases) page on Github contains the `libagent`
-releases.
-
 ## Documentation
 
 * **Installation** instructions are [here](doc/INSTALL.md)
