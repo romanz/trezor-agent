@@ -121,9 +121,7 @@ def run_decrypt(device_type, args):
     for file_index, stanzas in stanza_map.items():
         _handle_single_file(file_index, stanzas, identities, c)
 
-    sys.stdout.buffer.write('-> done\n\n'.encode())
-    sys.stdout.flush()
-    sys.stdout.close()
+    send('-> done\n\n')
 
 
 def _handle_single_file(file_index, stanzas, identities, c):
@@ -131,18 +129,23 @@ def _handle_single_file(file_index, stanzas, identities, c):
     for peer_pubkey, encrypted in stanzas:
         for identity in identities:
             id_str = identity.to_string()
-            msg = base64_encode(f'Please confirm {id_str} decryption on {d} device...'.encode())
-            sys.stdout.buffer.write(f'-> msg\n{msg}\n'.encode())
-            sys.stdout.flush()
+            msg = f'Please confirm {id_str} decryption on {d} device...'
+            send(f'-> msg\n{base64_encode(msg.encode())}\n')
 
             key = c.ecdh(identity=identity, peer_pubkey=peer_pubkey)
+
             result = decrypt(key=key, encrypted=encrypted)
             if not result:
                 continue
 
-            sys.stdout.buffer.write(f'-> file-key {file_index}\n{base64_encode(result)}\n'.encode())
-            sys.stdout.flush()
+            send(f'-> file-key {file_index}\n{base64_encode(result)}\n')
             return
+
+
+def send(msg):
+    """Send a response back to `age` binary."""
+    sys.stdout.buffer.write(msg.encode())
+    sys.stdout.flush()
 
 
 def main(device_type):
