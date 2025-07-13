@@ -11,6 +11,8 @@ from . import interface
 
 log = logging.getLogger(__name__)
 
+DEPTH_REQUEST_1 = 0
+DEPTH_REQUEST_2 = 3
 
 def _expand_path(path):
     """Convert BIP32 path into bytes."""
@@ -33,6 +35,18 @@ def _convert_public_key(ecdsa_curve_name, result):
         result = b'\x00' + bytes(keyY)
     return bytes(result)
 
+def _is_valid_blob_format(data):
+    """Checks if data is a valid format that can be parsed by ledger devices"""
+    offset = 0
+    depth = 0
+    while offset < len(data):
+        """Read length"""
+        length = struct.unpack_from(">I", data, offset)[0]
+        if depth == DEPTH_REQUEST_1 or depth == DEPTH_REQUEST_2:
+            length += 1
+        offset += 4 + length
+        depth += 1
+    return offset == len(data)
 
 class LedgerNanoS(interface.Device):
     """Connection to Ledger Nano S device."""
@@ -101,6 +115,7 @@ class LedgerNanoS(interface.Device):
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
         # pylint: disable=too-many-locals,too-many-branches
+        valid_blob = _is_valid_blob_format(blob)
         path = _expand_path(identity.get_bip32_address(ecdh=False))
         offset = 0
         result = None
@@ -112,14 +127,14 @@ class LedgerNanoS(interface.Device):
             data += blob[offset:offset + chunk_size]
 
             if identity.identity_dict['proto'] == 'ssh':
-                ins = '04'
+                ins = '04' if valid_blob else '06'
             else:
                 ins = '08'
 
             if identity.curve_name == 'nist256p1':
-                p2 = '81' if identity.identity_dict['proto'] == 'ssh' else '01'
+                p2 = '81' if identity.identity_dict['proto'] == 'ssh' and valid_blob else '01'
             else:
-                p2 = '82' if identity.identity_dict['proto'] == 'ssh' else '02'
+                p2 = '82' if identity.identity_dict['proto'] == 'ssh' and valid_blob else '02'
 
             if offset + chunk_size == len(blob) and self.ledger_app_supports_end_of_frame_byte:
                 # mark that we are at the end of the frame
