@@ -96,6 +96,12 @@ def run_sign(device_type, args):
         sig_str = binascii.b2a_base64(sig).decode("ascii")
         print(f'trusted comment: {args.trusted_comment}\n' + sig_str, end="")
 
+    if args.embed:
+        # flush to respect print() vs. buffer write order
+        sys.stdout.flush()
+        sys.stdout.buffer.write(data_to_sign)
+        sys.stdout.flush()
+
 
 def main(device_type):
     """Parse command-line arguments."""
@@ -115,7 +121,10 @@ def main(device_type):
     p.add_argument('-c', '--untrusted-comment',
                    help='defaults to "pubkey {pubkey_str}"')
     p.add_argument('-t', '--trusted-comment')
-    p.add_argument('-H', '--prehash', default=False, action='store_true')
+    p.add_argument('-e', '--embed', default=False, action='store_true',
+                   help='embed the message after the signature (signify only)')
+    p.add_argument('-H', '--prehash', default=False, action='store_true',
+                   help='(minisign only)')
     p.set_defaults(func=run_sign)
 
     args = parser.parse_args()
