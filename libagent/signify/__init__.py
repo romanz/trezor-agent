@@ -84,13 +84,17 @@ def run_sign(device_type, args):
     sig, pubkey = Client(device=device_type()).sign_with_pubkey(identity, data_to_sign)
     pubkey_str = format_payload(pubkey=pubkey, data=pubkey, sig_alg=sig_alg)
     sig_str = format_payload(pubkey=pubkey, data=sig, sig_alg=sig_alg)
-    untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
+    if args.untrusted_comment is not None:
+        untrusted_comment = f'untrusted comment: {args.untrusted_comment}\n'
+    else:
+        untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
     print(untrusted_comment + sig_str, end="")
 
-    comment_to_sign = sig + args.comment.encode()
-    sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
-    sig_str = binascii.b2a_base64(sig).decode("ascii")
-    print(f'trusted comment: {args.comment}\n' + sig_str, end="")
+    if args.trusted_comment is not None:
+        comment_to_sign = sig + args.trusted_comment.encode()
+        sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
+        sig_str = binascii.b2a_base64(sig).decode("ascii")
+        print(f'trusted comment: {args.trusted_comment}\n' + sig_str, end="")
 
 
 def main(device_type):
@@ -108,7 +112,9 @@ def main(device_type):
     p = subparsers.add_parser('sign')
     p.add_argument('user_id')
     p.add_argument('-v', '--verbose', default=0, action='count')
-    p.add_argument('-c', '--comment', default=time.asctime())
+    p.add_argument('-c', '--untrusted-comment',
+                   help='defaults to "pubkey {pubkey_str}"')
+    p.add_argument('-t', '--trusted-comment')
     p.add_argument('-H', '--prehash', default=False, action='store_true')
     p.set_defaults(func=run_sign)
 
