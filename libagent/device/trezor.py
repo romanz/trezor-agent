@@ -47,15 +47,14 @@ class Trezor(interface.Device):
 
     def connect(self):
         """Enumerate and connect to the first available interface."""
-        transport = self._defs.find_device()
-        if not transport:
+        client = self._defs.find_device()
+        client.pin_callback = lambda msg: self.ui.get_pin()
+        if not client:
             raise interface.NotFoundError('{} not connected'.format(self))
 
-        log.debug('using transport: %s', transport)
+        log.debug('using client: %s', client)
         for _ in range(5):  # Retry a few times in case of PIN failures
-            connection = self._defs.Client(transport=transport,
-                                           ui=self.ui,
-                                           session_id=self.__class__.cached_session_id)
+            connection = client.get_session()
             self._verify_version(connection)
 
             try:
@@ -75,8 +74,8 @@ class Trezor(interface.Device):
 
     def close(self):
         """Close connection."""
-        self.__class__.cached_session_id = self.conn.session_id
-        super().close()
+        self.__class__.cached_session_id = self.conn.id
+        self.conn.client.transport.close()
 
     def pubkey(self, identity, ecdh=False):
         """Return public key."""
