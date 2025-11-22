@@ -32,6 +32,7 @@ def bytes_to_words(entropy_bytes: bytes, vocabulary: List[str]) -> List[str]:
     """
     # input validation
     assert isinstance(vocabulary, list) and len(vocabulary) > 0, "Vocabulary cannot be empty."
+    assert all(isinstance(word, str) for word in vocabulary), "Inconsistent vocabulary types"
     assert isinstance(entropy_bytes, bytes) and len(entropy_bytes) >= 16, \
         "Input bytes must be at least 16 bytes long."
 
