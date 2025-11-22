@@ -58,3 +58,6 @@ target/
 
 # Sublime Text
 *.sublime-*
+
+# JetBrains IDE
+.idea
