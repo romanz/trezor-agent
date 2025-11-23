@@ -97,6 +97,8 @@ def parse_ssh_blob(data):
             res['key_type'] = util.read_frame(i)
             public_key = util.read_frame(i)
             res['public_key'] = formats.parse_pubkey(public_key)
+            if res['auth'] == b'publickey-hostbound-v00@openssh.com':
+                res['server_host_key'] = formats.parse_pubkey(util.read_frame(i))
 
     unparsed = i.read()
     if unparsed:
