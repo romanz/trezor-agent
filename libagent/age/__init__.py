@@ -43,7 +43,7 @@ def run_pubkey(device_type, args):
                 'so please note that the API and features may '
                 'change without backwards compatibility!')
 
-    c = client.Client(device=device_type())
+    c = client.Client(device=device_type(args))
     pubkey = c.pubkey(identity=client.create_identity(args.identity), ecdh=True)
     recipient = bech32_encode(prefix="age", data=pubkey)
     print(f"# recipient: {recipient}")
@@ -89,7 +89,7 @@ def decrypt(key, encrypted):
 def run_decrypt(device_type, args):
     """Unlock hardware device (for future interaction)."""
     # pylint: disable=too-many-locals
-    c = client.Client(device=device_type())
+    c = client.Client(device=device_type(args))
 
     lines = (line.strip() for line in sys.stdin)  # strip whitespace
     lines = (line for line in lines if line)  # skip empty lines
@@ -151,6 +151,7 @@ def send(msg):
 def main(device_type):
     """Parse command-line arguments."""
     p = argparse.ArgumentParser()
+    device_type.setup_arg_parser(p)
 
     agent_package = device_type.package_name()
     resources = [metadata.distribution(agent_package), metadata.distribution('libagent')]

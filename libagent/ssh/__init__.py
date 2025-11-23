@@ -80,6 +80,7 @@ def create_agent_parser(device_type):
               'doc/README-SSH.md for usage examples.')
     p = configargparse.ArgParser(default_config_files=['~/.ssh/agent.config'],
                                  epilog=epilog)
+    device_type.setup_arg_parser(p)
     p.add_argument('-v', '--verbose', default=0, action='count')
 
     agent_package = device_type.package_name()
@@ -324,7 +325,7 @@ def main(device_type):
     device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     conn = JustInTimeConnection(
-        conn_factory=lambda: client.Client(device_type()),
+        conn_factory=lambda: client.Client(device_type(args)),
         identities=identities, public_keys=public_keys)
 
     sock_path = _get_sock_path(args)

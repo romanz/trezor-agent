@@ -60,6 +60,10 @@ class LedgerNanoS(interface.Device):
         """Python package name (at PyPI)."""
         return 'ledger-agent'
 
+    @classmethod
+    def setup_arg_parser(cls, parser):
+        """Add device-specific parameters to the argument parser."""
+
     def connect(self):
         """Enumerate and connect to the first USB HID interface."""
         try:

@@ -40,7 +40,7 @@ class Client:
             sig, pubkey = self.device.sign_with_pubkey(blob=data, identity=identity)
             assert len(sig) == 64
             assert len(pubkey) == 33
-            assert pubkey[:1] == b"\x00"
+            assert pubkey[:1] == b"\x00"  # Ed25519 public key marker prefix
             return sig, pubkey[1:]
 
 
@@ -62,7 +62,7 @@ def run_pubkey(device_type, args):
                 'may change without backwards compatibility!')
 
     identity = _create_identity(user_id=args.user_id)
-    pubkey = Client(device=device_type()).pubkey(identity=identity)
+    pubkey = Client(device=device_type(args)).pubkey(identity=identity)
     comment = f'untrusted comment: identity {identity.to_string()}\n'
     payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
     print(comment + payload, end="")
@@ -81,14 +81,14 @@ def run_sign(device_type, args):
         sig_alg = ALG_MINISIGN
         data_to_sign = hashlib.blake2b(data_to_sign).digest()
 
-    sig, pubkey = Client(device=device_type()).sign_with_pubkey(identity, data_to_sign)
+    sig, pubkey = Client(device=device_type(args)).sign_with_pubkey(identity, data_to_sign)
     pubkey_str = format_payload(pubkey=pubkey, data=pubkey, sig_alg=sig_alg)
     sig_str = format_payload(pubkey=pubkey, data=sig, sig_alg=sig_alg)
     untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
     print(untrusted_comment + sig_str, end="")
 
     comment_to_sign = sig + args.comment.encode()
-    sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
+    sig, _ = Client(device=device_type(args)).sign_with_pubkey(identity, comment_to_sign)
     sig_str = binascii.b2a_base64(sig).decode("ascii")
     print(f'trusted comment: {args.comment}\n' + sig_str, end="")
 
@@ -96,6 +96,7 @@ def run_sign(device_type, args):
 def main(device_type):
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
+    device_type.setup_arg_parser(parser)
 
     subparsers = parser.add_subparsers(title='Action', dest='action')
     subparsers.required = True
