@@ -22,7 +22,11 @@ class BlockstreamJade(interface.Device):
     """Connection to Blockstream Jade device."""
 
     MIN_SUPPORTED_FW_VERSION = semver.VersionInfo(0, 1, 33)
-    DEVICE_IDS = [(0x10c4, 0xea60), (0x1a86, 0x55d4)]
+    DEVICE_IDS = [
+        (0x10c4, 0xea60),  # Jade 1.0
+        (0x1a86, 0x55d4),  # Jade 1.1
+        (0x303a, 0x4001),  # Jade 2 (Plus)
+    ]
     connection = None
 
     @classmethod
