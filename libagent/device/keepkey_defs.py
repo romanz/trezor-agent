@@ -10,9 +10,12 @@ from keepkeylib.transport_hid import HidTransport
 from keepkeylib.transport_webusb import WebUsbTransport
 from keepkeylib.types_pb2 import IdentityType
 
+PASSPHRASE_TEST_PATH = Client.expand_path("-44/-1/0/0/0")
 get_public_node = Client.get_public_node
+get_address = Client.get_address
 sign_identity = Client.sign_identity
 Client.state = None
+Client.session_id = None
 
 
 def find_device():
