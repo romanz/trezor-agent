@@ -45,7 +45,7 @@ to the `[Service]` section to tell the PIN entry program how to connect to the X
 If you haven't completed initialization yet, run:
 
 ```
-$ (trezor|keepkey|ledger)-gpg init --pin-entry-binary trezor-gpg-pinentry-tk "Roman Zeyde <roman.zeyde@gmail.com>"
+$ trezor-gpg init --pin-entry-binary trezor-gpg-pinentry-tk "Roman Zeyde <roman.zeyde@gmail.com>"
 ```
 
 to configure the PIN entry at the same time.

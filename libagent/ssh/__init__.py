@@ -320,7 +320,7 @@ def main(device_type):
         identity.identity_dict['proto'] = 'ssh'
         log.info('identity #%d: %s', index, identity.to_string())
 
-    # override default PIN/passphrase entry tools (relevant for TREZOR/Keepkey):
+    # override default PIN/passphrase entry tools (relevant for TREZOR):
     device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
 
     conn = JustInTimeConnection(

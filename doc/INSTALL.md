@@ -83,33 +83,7 @@ gpg (GnuPG) 2.1.15
     $ brew install trezor-agent
     ```
 
-# 3. Install the KeepKey agent
-
-1. Make sure you are running the latest firmware version on your KeepKey:
-
- * [KeepKey firmware releases](https://github.com/keepkey/keepkey-firmware/releases): `3.0.17+`
-
-2. Make sure that your `udev` rules are configured [correctly](https://support.keepkey.com/support/solutions/articles/6000037796-keepkey-wallet-is-not-being-recognized-by-linux).
-Then, install the latest [keepkey-agent](https://pypi.python.org/pypi/keepkey-agent) package:
-
-    ```
-    $ pip3 install keepkey_agent
-    ```
-
-    Or, on Mac using Homebrew:
-
-    ```
-    $ brew install keepkey-agent
-    ```
-
-    Or, directly from the latest source code:
-
-    ```
-    $ git clone https://github.com/romanz/trezor-agent
-    $ pip3 install --user -e trezor-agent/agents/keepkey
-    ```
-
-# 4. Install the Ledger Nano S agent
+# 3. Install the Ledger Nano S agent
 
 1. Make sure you are running the latest firmware version on your Ledger Nano S:
 
@@ -130,7 +104,7 @@ Then, install the latest [keepkey-agent](https://pypi.python.org/pypi/keepkey-ag
     $ pip3 install --user -e trezor-agent/agents/ledger
     ```
 
-# 5. Install the OnlyKey agent
+# 4. Install the OnlyKey agent
 
 1. Make sure you are running the latest firmware version on your OnlyKey:
 
@@ -151,7 +125,7 @@ Then, install the latest [keepkey-agent](https://pypi.python.org/pypi/keepkey-ag
     $ pip3 install --user -e trezor-agent/agents/onlykey
     ```
 
-# 6. Install the Blockstream Jade agent
+# 5. Install the Blockstream Jade agent
 
 1. Make sure you are running the latest firmware version on your Blockstream Jade:
 
@@ -175,7 +149,7 @@ Then, install the latest [keepkey-agent](https://pypi.python.org/pypi/keepkey-ag
     $ pip3 install --user -e trezor-agent/agents/jade
     ```
 
-# 7. Installation Troubleshooting
+# 6. Installation Troubleshooting
 
 If there is an import problem with the installed `protobuf` package,
 see [this issue](https://github.com/romanz/trezor-agent/issues/28) for fixing it.
