@@ -49,6 +49,15 @@ class UI:
             binary=self.pin_entry_binary,
             options=self.options_getter())
 
+    def get_pairing_code(self):
+        """Ask the user for pairing code."""
+        return interact(
+            title='{} pairing'.format(self.device_name),
+            prompt='Pairing code:',
+            description='Enter 6-digit code show on {} screen'.format(self.device_name),
+            binary=self.pin_entry_binary,
+            options=self.options_getter())
+
     def get_passphrase(self, prompt='Passphrase:', available_on_device=False):
         """Ask the user for passphrase."""
         passphrase = None
