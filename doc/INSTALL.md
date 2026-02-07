@@ -83,28 +83,7 @@ gpg (GnuPG) 2.1.15
     $ brew install trezor-agent
     ```
 
-# 3. Install the Ledger Nano S agent
-
-1. Make sure you are running the latest firmware version on your Ledger Nano S:
-
- * [Ledger Nano S firmware releases](https://github.com/LedgerHQ/blue-app-ssh-agent): `0.0.3+` (install [SSH/PGP Agent](https://www.ledgerwallet.com/images/apps/chrome-mngr-apps.png) app)
-
-2. Make sure that your `udev` rules are configured [correctly](https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-).
-3. Then, install the latest [ledger-agent](https://pypi.python.org/pypi/ledger-agent) package:
-
-    ```
-    $ pip3 install ledger-agent
-    ```
-
-    Or, directly from the latest source code:
-
-    ```
-    $ git clone https://github.com/romanz/trezor-agent
-    $ pip3 install --user -e trezor-agent
-    $ pip3 install --user -e trezor-agent/agents/ledger
-    ```
-
-# 4. Install the OnlyKey agent
+# 3. Install the OnlyKey agent
 
 1. Make sure you are running the latest firmware version on your OnlyKey:
 
@@ -125,7 +104,7 @@ gpg (GnuPG) 2.1.15
     $ pip3 install --user -e trezor-agent/agents/onlykey
     ```
 
-# 5. Install the Blockstream Jade agent
+# 4. Install the Blockstream Jade agent
 
 1. Make sure you are running the latest firmware version on your Blockstream Jade:
 
@@ -149,7 +128,7 @@ gpg (GnuPG) 2.1.15
     $ pip3 install --user -e trezor-agent/agents/jade
     ```
 
-# 6. Installation Troubleshooting
+# 5. Installation Troubleshooting
 
 If there is an import problem with the installed `protobuf` package,
 see [this issue](https://github.com/romanz/trezor-agent/issues/28) for fixing it.

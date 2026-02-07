@@ -2,7 +2,7 @@
 
 ## Preface
 
-Since this library supports multiple hardware security devices, this document uses the term `<device>` in commands to refer to the device of your choice. For example, if using Ledger Nano S, the command `<device>-agent` becomes `ledger-agent`.
+Since this library supports multiple hardware security devices, this document uses the term `<device>` in commands to refer to the device of your choice.
 
 Installation and building has to be done with administrative privileges. Without these, the agent would only be installed for the current user, and could therefore not be used as a service. To run an administrative shell, hold the Windows key on the keyboard, and press R. In the input box that appears, type either "cmd" or "powershell" (Based on your preference. Both work), and then hold the Ctrl and Shift keys, and press Enter. A User Account Control dialog will pop up. Simply press "Yes".
 

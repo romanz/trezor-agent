@@ -12,9 +12,8 @@ See the following blog posts about this tool:
 - [TREZOR Firmware 1.3.4 enables SSH login](https://medium.com/@satoshilabs/trezor-firmware-1-3-4-enables-ssh-login-86a622d7e609)
 - [TREZOR Firmware 1.3.6 — GPG Signing, SSH Login Updates and Advanced Transaction Features for Segwit](https://medium.com/@satoshilabs/trezor-firmware-1-3-6-20a7df6e692)
 - [TREZOR Firmware 1.4.0 — GPG decryption support](https://www.reddit.com/r/TREZOR/comments/50h8r9/new_trezor_firmware_fidou2f_and_initial_ethereum/d7420q7/)
-- [A Step by Step Guide to Securing your SSH Keys with the Ledger Nano S](https://thoughts.t37.net/a-step-by-step-guide-to-securing-your-ssh-keys-with-the-ledger-nano-s-92e58c64a005)
 
-Currently [TREZOR One](https://trezor.io/), [TREZOR Model T](https://trezor.io/), [Blockstream Jade](https://blockstream.com/jade/), [Ledger Nano S](https://www.ledgerwallet.com/products/ledger-nano-s), and [OnlyKey](https://onlykey.io) are supported.
+Currently [TREZOR One](https://trezor.io/), [TREZOR Model T](https://trezor.io/), [Blockstream Jade](https://blockstream.com/jade/) and [OnlyKey](https://onlykey.io) are supported.
 
 ## Components
 
@@ -23,7 +22,6 @@ agents to interact with several different hardware devices:
 
 * [`libagent`](https://pypi.org/project/libagent/): shared library
 * [`trezor-agent`](https://pypi.org/project/trezor-agent/): Using Trezor as hardware-based SSH/PGP/age agent
-* [`ledger_agent`](https://pypi.org/project/ledger_agent/): Using Ledger as hardware-based SSH/PGP agent
 * [`jade_agent`](https://github.com/Blockstream/Jade/): Using Blockstream Jade as hardware-based SSH/PGP agent
 * [`onlykey-agent`](https://pypi.org/project/onlykey-agent/): Using OnlyKey as hardware-based SSH/PGP agent
 
