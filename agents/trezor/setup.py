@@ -39,5 +39,6 @@ setup(
         'trezor-gpg-agent = trezor_agent:gpg_agent',
         'trezor-signify = trezor_agent:signify_tool',
         'age-plugin-trezor = trezor_agent:age_tool',  # see https://github.com/str4d/rage/blob/main/age-plugin/README.md
+        'trezor-password = trezor_agent:password_tool',
     ]},
 )
