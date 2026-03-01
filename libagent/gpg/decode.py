@@ -294,7 +294,7 @@ def _parse_pubkey_packets(pubkey_bytes):
 
 
 def load_by_keygrip(pubkey_bytes, keygrip):
-    """Return public key and first user ID for specified keygrip."""
+    """Return public key and user IDs for specified keygrip."""
     for packets in _parse_pubkey_packets(pubkey_bytes):
         user_ids = [p for p in packets if p['type'] == 'user_id']
         for p in packets:
