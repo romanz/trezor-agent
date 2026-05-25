@@ -49,8 +49,8 @@ def run_pubkey(device_type, args):
     print(f"# recipient: {recipient}")
     print(f"# SLIP-0017: {args.identity}")
     data = args.identity.encode()
-    encoded = bech32_encode(prefix="age-plugin-trezor-", data=data).upper()
-    decoded = bech32_decode(prefix="age-plugin-trezor-", encoded=encoded)
+    encoded = bech32_encode(prefix="age-plugin-onlykey-", data=data).upper()
+    decoded = bech32_decode(prefix="age-plugin-onlykey-", encoded=encoded)
     assert decoded.startswith(data)
     print(encoded)
 
@@ -104,7 +104,7 @@ def run_decrypt(device_type, args):
 
         if line.startswith("-> add-identity "):
             encoded = line.split(" ")[-1].lower()
-            data = bech32_decode("age-plugin-trezor-", encoded)
+            data = bech32_decode("age-plugin-onlykey-", encoded)
             identity = client.create_identity(data.decode())
             identities.append(identity)
 
@@ -166,6 +166,7 @@ def main(device_type):
 
     log_path = os.environ.get("TREZOR_AGE_PLUGIN_LOG")
     util.setup_logging(verbosity=args.verbose, filename=log_path)
+    """util.setup_logging(verbosity=2, filename="/tmp/age-plugin.log")"""
 
     log.debug("starting age plugin: %s", args)
 

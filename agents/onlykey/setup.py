@@ -37,5 +37,7 @@ setup(
         'onlykey-agent = onlykey_agent:ssh_agent',
         'onlykey-gpg = onlykey_agent:gpg_tool',
         'onlykey-gpg-agent = onlykey_agent:gpg_agent',
+        'onlykey-signify = onlykey_agent:signify_tool',
+        'age-plugin-onlykey = onlykey_agent:age_tool',  # see https://github.com/str4d/rage/blob/main/age-plugin/README.md
     ]},
 )

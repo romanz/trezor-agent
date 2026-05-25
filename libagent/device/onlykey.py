@@ -6,6 +6,9 @@ import codecs
 import hashlib
 import logging
 import time
+import sys
+import base64
+import io
 
 import ecdsa
 import nacl.signing
@@ -251,9 +254,10 @@ class OnlyKey(interface.Device):
         assert len(d) == 32
         b1, b2, b3 = get_button(self, d[0]), get_button(self, d[15]), get_button(self, d[31])
         log.info('Key Slot =%s', this_slot_id)
-        print('Enter the 3 digit challenge code on OnlyKey to authorize '+identity.to_string())
-        print('{} {} {}'.format(b1, b2, b3))
+        print('Enter the 3 digit challenge code on OnlyKey to authorize '+identity.to_string(), file=sys.stderr, flush=True)
+        print('{} {} {}'.format(b1, b2, b3), file=sys.stderr, flush=True)
         t_end = time.time() + 22
+        log.info('Requesting challenge code from OnlyKey: {} {} {}'.format(b1, b2, b3))
         if curve_name != 'rsa':
             self.ok.send_large_message2(msg=self._defs.Message.OKSIGN, payload=raw_message,
                                         slot_id=this_slot_id)
@@ -337,8 +341,11 @@ class OnlyKey(interface.Device):
         b1, b2, b3 = get_button(self, d[0]), get_button(self, d[15]), get_button(self, d[31])
         self.ok.send_large_message2(msg=self._defs.Message.OKDECRYPT, payload=raw_message,
                                     slot_id=this_slot_id)
-        print('Enter the 3 digit challenge code on OnlyKey to authorize ' + identity.to_string())
-        print('{} {} {}'.format(b1, b2, b3))
+        print('Enter the 3 digit challenge code on OnlyKey to authorize ' + identity.to_string(), file=sys.stderr, flush=True)
+        print('{} {} {}'.format(b1, b2, b3), file=sys.stderr, flush=True)
+        msg = f'Enter the 3 digit challenge code on OnlyKey to authorize ' + identity.to_string() + '\n{} {} {}'.format(b1, b2, b3)
+        send(f'-> msg\n{base64_encode(msg.encode())}\n')
+        log.info('Requesting challenge code from OnlyKey: {} {} {}'.format(b1, b2, b3))
         t_end = time.time() + 22
         if curve_name != 'rsa':
             while time.time() < t_end:
@@ -365,9 +372,16 @@ class OnlyKey(interface.Device):
 
         log.info('received= %s', repr(result))
         log.info('disconnected from %s', self.device_name)
-        self.ok.close()
+        """self.ok.close()"""
         return bytes(result)
 
+    def ecdh_with_pubkey(self, identity, pubkey):
+        log.debug("ecdh_with_pubkey() called, calling ecdh()")
+        session_key = self.ecdh(identity=identity, pubkey=pubkey)
+        log.debug("ecdh() complete, calling pubkey()")
+        self_pubkey = bytes(self.pubkey(identity=identity, ecdh=True))
+        log.debug("pubkey() complete, returning")
+        return session_key, self_pubkey
 
 def get_button(self, byte):
     """Return button number."""
@@ -375,3 +389,15 @@ def get_button(self, byte):
         return byte % 5 + 1
     else:
         return byte % 6 + 1
+
+def send(msg):
+    """Send a response back to `age` binary."""
+    sys.stdout.buffer.write(msg.encode())
+    sys.stdout.flush()
+BYTES_PER_LINE = 48
+def base64_encode(data: bytes) -> str:
+    """Encode data using Base64 (and remove '=')."""
+    reader = io.BytesIO(data)
+    chunks = map(base64.b64encode, iter(lambda: reader.read(BYTES_PER_LINE), b""))
+    chunks = (chunk.replace(b"=", b"") for chunk in chunks)
+    return b"\n".join(chunks).decode()
