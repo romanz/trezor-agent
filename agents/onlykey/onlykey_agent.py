@@ -1,5 +1,6 @@
 from libagent import age, signify, gpg, ssh
 from libagent.device.onlykey import OnlyKey as DeviceType
+import libagent
 
 age_tool = lambda: age.main(DeviceType)
 ssh_agent = lambda: libagent.ssh.main(DeviceType)
