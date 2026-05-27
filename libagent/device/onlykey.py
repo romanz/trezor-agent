@@ -192,6 +192,17 @@ class OnlyKey(interface.Device):
         log.info('pubkey len = %s', len(ok_pubkey))
         return ok_pubkey
 
+    def sign_with_pubkey(self, identity, blob):
+        """Sign given blob and return signature plus public key."""
+        vk = self.pubkey(identity=identity, ecdh=False)
+        pubkey = bytes(vk)
+
+        if identity.get_curve_name(ecdh=False) == 'ed25519' and len(pubkey) == 32:
+            pubkey = b'\x00' + pubkey
+
+        sig = self.sign(identity, blob)
+        return sig, pubkey
+
     def sign(self, identity, blob):
         """Sign given blob and return the signature (as bytes)."""
         curve_name = identity.get_curve_name(ecdh=False)
