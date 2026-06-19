@@ -1,6 +1,7 @@
 """TREZOR-related code (see http://bitcointrezor.com/)."""
 
 import logging
+import threading
 
 from trezorlib.btc import get_public_node
 from trezorlib.client import PassphraseSetting, get_default_client
@@ -26,30 +27,109 @@ class Trezor(interface.Device):
 
     ui = None  # can be overridden by device's users
     _session = None  # cache one session per agent process
+    _client = None  # the owning TrezorClient (holds the USB transport)
+    _lock = threading.RLock()  # guards the cached session/client and the timer
+    _idle_timer = None  # threading.Timer that releases the session when idle
+    _idle_gen = 0  # bumped on every (re)arm/cancel to invalidate stale timers
 
     @property
     def session(self):
         """Return cached session, or connect and pair if needed."""
-        if self.__class__._session is None:
-            assert self.ui is not None
-            client = get_default_client(
-                app_name="trezor-agent",
-                pin_callback=self.ui.get_pin,
-                code_entry_callback=self.ui.get_pairing_code,
-            )
-            session = client.get_session(passphrase=PassphraseSetting.AUTO)
-            log.info("%s @ fpr=%s", session, session.get_root_fingerprint().hex())
-            self.__class__._session = session
+        return self._get_session()
 
-        return self.__class__._session
+    @classmethod
+    def _get_session(cls):
+        with cls._lock:
+            if cls._session is None:
+                assert cls.ui is not None
+                client = get_default_client(
+                    app_name="trezor-agent",
+                    pin_callback=cls.ui.get_pin,
+                    code_entry_callback=cls.ui.get_pairing_code,
+                )
+                session = client.get_session(passphrase=PassphraseSetting.AUTO)
+                log.info("%s @ fpr=%s", session, session.get_root_fingerprint().hex())
+                cls._client = client
+                cls._session = session
+
+            return cls._session
 
     def connect(self):
-        """One session is cached."""
+        """Reuse the cached session, cancelling any pending idle release."""
+        self._cancel_idle_timer()
         return self
 
     def close(self):
-        """One session is cached."""
-        pass
+        """Release the cached session, immediately or after an idle delay.
+
+        Controlled by ``close_after_idle`` (see ``interface.Device``):
+        ``None`` keeps the session for the whole process (the default and the
+        historical behavior), ``0`` releases it after every operation, and
+        ``N > 0`` releases it after ``N`` seconds of inactivity. Releasing the
+        session frees the device for other applications between operations.
+        """
+        idle = self.close_after_idle
+        if idle is None:
+            return
+        if idle <= 0:
+            self._release_session()
+        else:
+            self._arm_idle_timer(idle)
+
+    @classmethod
+    def _cancel_idle_timer(cls):
+        with cls._lock:
+            cls._idle_gen += 1
+            if cls._idle_timer is not None:
+                cls._idle_timer.cancel()
+                cls._idle_timer = None
+
+    @classmethod
+    def _arm_idle_timer(cls, idle):
+        with cls._lock:
+            cls._idle_gen += 1
+            gen = cls._idle_gen
+            if cls._idle_timer is not None:
+                cls._idle_timer.cancel()
+            timer = threading.Timer(idle, cls._idle_timeout, args=(gen,))
+            timer.daemon = True
+            cls._idle_timer = timer
+            timer.start()
+
+    @classmethod
+    def _idle_timeout(cls, gen):
+        with cls._lock:
+            # A new operation may have cancelled/re-armed us after the timer
+            # fired but before it took the lock: only act if still current.
+            if gen != cls._idle_gen:
+                return
+            cls._idle_timer = None
+            cls._release_session()
+
+    @classmethod
+    def _release_session(cls):
+        """Close the cached session and release the USB transport, if any."""
+        with cls._lock:
+            cls._idle_gen += 1
+            if cls._idle_timer is not None:
+                cls._idle_timer.cancel()
+                cls._idle_timer = None
+            session, client = cls._session, cls._client
+            cls._session = None
+            cls._client = None
+            if session is None and client is None:
+                return
+            if session is not None:
+                try:
+                    session.close()
+                except Exception as e:  # pylint: disable=broad-except
+                    log.debug("ending device session failed: %s", e)
+            if client is not None:
+                try:
+                    client.transport.close()
+                except Exception as e:  # pylint: disable=broad-except
+                    log.debug("closing device transport failed: %s", e)
+            log.info("released cached device session")
 
     def pubkey(self, identity, ecdh=False):
         """Return public key."""

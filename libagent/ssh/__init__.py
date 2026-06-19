@@ -101,6 +101,10 @@ def create_agent_parser(device_type):
                    help='Path to the log file (to be written by the agent).')
     p.add_argument('--sock-path', type=str,
                    help='Path to the ' + SOCK_TYPE + ' of the agent.')
+    p.add_argument('--close-after-idle', type=float, default=None, metavar='SECONDS',
+                   help='release the device after each operation (0) or after '
+                        'SECONDS of inactivity, so other applications can use '
+                        'it; by default the device is held until the agent exits.')
 
     p.add_argument('--pin-entry-binary', type=str, default=argparse.SUPPRESS,
                    help='Path to PIN entry UI helper.')
@@ -322,6 +326,8 @@ def main(device_type):
 
     # override default PIN/passphrase entry tools (relevant for TREZOR):
     device_type.ui = device.ui.UI(device_type=device_type, config=vars(args))
+    # release the device between operations, if requested (relevant for TREZOR):
+    device_type.close_after_idle = args.close_after_idle
 
     conn = JustInTimeConnection(
         conn_factory=lambda: client.Client(device_type()),

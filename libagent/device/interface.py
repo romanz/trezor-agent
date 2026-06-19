@@ -105,6 +105,14 @@ class Identity:
 class Device:
     """Abstract cryptographic hardware device interface."""
 
+    # Release a cached device session when the agent is otherwise idle, so the
+    # device is free for other applications between operations. In seconds:
+    #   None  -> keep the session for the agent's whole lifetime (default).
+    #   0     -> release after every operation.
+    #   N > 0 -> release after N seconds of inactivity.
+    # Honored by backends that cache a session across operations.
+    close_after_idle = None
+
     def __init__(self):
         """C-tor."""
         self.conn = None
