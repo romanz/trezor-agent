@@ -1,0 +1,22 @@
+[Unit]
+Description=trezor-agent SSH agent
+Requires=trezor-ssh-agent.socket
+After=trezor-ssh-agent.socket
+
+[Service]
+Type=simple
+Restart=always
+# A graphical PIN / passphrase prompt needs access to your display.
+Environment="DISPLAY=:0"
+Environment="PATH=/bin:/usr/bin:/usr/local/bin:%h/.local/bin"
+# Replace IDENTITY with the identity you used to export your public key, e.g.
+# user@example.com. It can also be a path (starting with /) to a file listing
+# one exported public key per line, which is the convenient way to serve
+# several keys/hosts from a single agent.
+#
+# --sock-path must match the .socket unit's ListenStream=. If trezor-agent is
+# installed somewhere other than /usr/bin, adjust the path below.
+ExecStart=/usr/bin/trezor-agent --foreground --sock-path %t/trezor-agent/S.ssh IDENTITY
+
+[Install]
+Also=trezor-ssh-agent.socket

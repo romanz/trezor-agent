@@ -1,0 +1,14 @@
+[Unit]
+Description=trezor-agent SSH agent socket
+
+[Socket]
+# This path is what SSH_AUTH_SOCK should point at (see the .service unit and
+# doc/README-SSH.md). %t expands to $XDG_RUNTIME_DIR (e.g. /run/user/1000).
+ListenStream=%t/trezor-agent/S.ssh
+FileDescriptorName=ssh
+Service=trezor-ssh-agent.service
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target
