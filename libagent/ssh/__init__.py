@@ -90,7 +90,7 @@ def create_agent_parser(device_type):
 
     curve_names = ', '.join(sorted(formats.SUPPORTED_CURVES))
     p.add_argument('-e', '--ecdsa-curve-name', metavar='CURVE',
-                   default=formats.CURVE_NIST256,
+                   default=formats.CURVE_ED25519,
                    help='specify ECDSA curve name: ' + curve_names)
     p.add_argument('--timeout',
                    default=UNIX_SOCKET_TIMEOUT, type=float,
