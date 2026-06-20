@@ -150,7 +150,32 @@ For more details, see the following great blog post: https://calebhearth.com/sig
 		allowedSignersFile = /home/user/Code/test-git-ssh-sig/.git/allowed-signers
 
 
+### Run a resident agent with a stable socket (`--sock-path`)
+
+By default `trezor-agent` puts its agent socket at a random path
+(`tempfile.mktemp(...)`) and only prints it when started with `-d`/`--daemonize`.
+That is fine for one-shot use, but a long-running ("resident") agent needs a
+*stable* socket path so that `SSH_AUTH_SOCK` can be pointed at it in advance —
+otherwise the socket appears to be "missing" because its path is unpredictable.
+
+Use `--sock-path` to pick that path and `--foreground` to keep the agent
+running:
+
+```
+$ trezor-agent --foreground --sock-path "$XDG_RUNTIME_DIR/trezor-agent.sock" identity@myhost &
+$ export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/trezor-agent.sock"
+$ ssh identity@myhost   # uses the resident agent
+```
+
+`$XDG_RUNTIME_DIR` (typically `/run/user/$UID`) is a good location: it is
+user-private and cleaned up on logout. The next section automates this with
+systemd.
+
 ### Start the agent as a systemd unit
+
+Ready-to-edit copies of the unit files below are shipped in
+[`contrib/systemd/`](../contrib/systemd/) — see that directory's `README.md` for
+a one-shot install. The inline copies follow.
 
 ##### 1. Create these files in `~/.config/systemd/user`
 
