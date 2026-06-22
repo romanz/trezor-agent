@@ -182,6 +182,8 @@ class NamedPipe:
         except win32api.error as e:
             if e.winerror == winerror.ERROR_BROKEN_PIPE:
                 return None
+            if e.winerror == winerror.ERROR_MORE_DATA:
+                return rbuf
             raise
 
     def send(self, data):
