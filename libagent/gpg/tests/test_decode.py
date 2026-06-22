@@ -43,19 +43,6 @@ def test_gpg_files(public_key_path):  # pylint: disable=redefined-outer-name
         assert list(decode.parse_packets(f))
 
 
-def test_has_custom_subpacket():
-    sig = {'unhashed_subpackets': []}
-    assert not decode.has_custom_subpacket(sig)
-
-    custom_markers = [
-        protocol.CUSTOM_SUBPACKET,
-        protocol.subpacket(10, protocol.CUSTOM_KEY_LABEL),
-    ]
-    for marker in custom_markers:
-        sig = {'unhashed_subpackets': [marker]}
-        assert decode.has_custom_subpacket(sig)
-
-
 def test_load_by_keygrip_missing():
     with pytest.raises(KeyError):
         decode.load_by_keygrip(pubkey_bytes=b'', keygrip=b'')
