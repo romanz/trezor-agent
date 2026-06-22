@@ -16,6 +16,7 @@ setup(
         'libagent.gpg',
         'libagent.signify',
         'libagent.ssh',
+        'libagent.password',
     ],
     install_requires=[
         'bech32>=1.2.0',

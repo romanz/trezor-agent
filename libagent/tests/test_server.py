@@ -3,8 +3,8 @@ import os
 import socket
 import tempfile
 import threading
+from unittest import mock
 
-import mock
 import pytest
 
 from .. import server, util

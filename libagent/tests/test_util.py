@@ -1,6 +1,6 @@
 import io
+from unittest import mock
 
-import mock
 import pytest
 
 from .. import util
@@ -67,6 +67,22 @@ def test_split_bits():
 
 def test_hexlify():
     assert util.hexlify(b'\x12\x34\xab\xcd') == '1234ABCD'
+
+
+def test_base58_encode():
+    # test vectors from https://www.ietf.org/archive/id/draft-msporny-base58-03.txt
+    input_bytes = "Hello World!".encode('ascii')
+    output_str = "2NEpo7TZRRrLZSi2U"
+    assert util.Base58.encode(input_bytes) == output_str
+    assert util.Base58.decode(output_str) == input_bytes
+    input_bytes = "The quick brown fox jumps over the lazy dog.".encode('ascii')
+    output_str = "USm3fpXnKG5EUBx2ndxBDMPVciP5hGey2Jh4NDv6gmeo1LkMeiKrLJUUBk6Z"
+    assert util.Base58.encode(input_bytes) == output_str
+    assert util.Base58.decode(output_str) == input_bytes
+    input_bytes = bytes.fromhex("0000287fb4cd")
+    output_str = "11233QC4"
+    assert util.Base58.encode(input_bytes) == output_str
+    assert util.Base58.decode(output_str) == input_bytes
 
 
 def test_low_bits():
