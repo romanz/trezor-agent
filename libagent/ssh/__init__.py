@@ -139,13 +139,23 @@ def serve(handler, sock_path, timeout=UNIX_SOCKET_TIMEOUT):
 
     If no connection is made during the specified timeout,
     retry until the context is over.
+
+    Under systemd socket activation (``LISTEN_FDS``), adopt the inherited
+    listening socket instead of binding ``sock_path``; ``sock_path`` is then
+    only used to advertise ``SSH_AUTH_SOCK`` and should match the unit's
+    ``ListenStream=``.
     """
     ssh_version = subprocess.check_output(['ssh', '-V'],
                                           stderr=subprocess.STDOUT)
     log.debug('local SSH version: %r', ssh_version)
     environ = {'SSH_AUTH_SOCK': sock_path, 'SSH_AGENT_PID': str(os.getpid())}
     device_mutex = threading.Lock()
-    with server.unix_domain_socket_server(sock_path) as sock:
+    listen_fd = server.socket_activation_fd()
+    if listen_fd is not None:
+        sock_server = server.unix_domain_socket_server_from_systemd(listen_fd)
+    else:
+        sock_server = server.unix_domain_socket_server(sock_path)
+    with sock_server as sock:
         sock.settimeout(timeout)
         quit_event = threading.Event()
         handle_conn = functools.partial(server.handle_connection,
