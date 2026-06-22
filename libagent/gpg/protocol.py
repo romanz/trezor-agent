@@ -103,6 +103,7 @@ def _compute_keygrip(params):
         exp = '{}:{}{}:'.format(len(name), name, len(value))
         parts.append(b'(' + exp.encode('ascii') + value + b')')
 
+    log.debug('keygrip parts: %s', parts)
     return hashlib.sha1(b''.join(parts)).digest()
 
 
@@ -121,6 +122,23 @@ def keygrip_nist256(vk):
         ['g', util.num2bytes(g, size=65)],
         ['n', util.num2bytes(vk.curve.order, size=32)],
         ['q', util.num2bytes(q, size=65)],
+    ])
+
+
+def keygrip_nist521(vk):
+    """Compute keygrip for NIST521 curve public keys."""
+    curve = vk.curve.curve
+    gen = vk.curve.generator
+    g = (4 << 1200) | (gen.x() << 600) | gen.y()
+    point = vk.pubkey.point
+    q = (4 << 1200) | (point.x() << 600) | point.y()
+    return _compute_keygrip([
+        ['p', util.num2bytes(curve.p(), size=66)],
+        ['a', util.num2bytes(curve.a() % curve.p(), size=66)],
+        ['b', util.num2bytes(curve.b() % curve.p(), size=66)],
+        ['g', util.num2bytes(g, size=160)],
+        ['n', util.num2bytes(vk.curve.order, size=66)],
+        ['q', util.num2bytes(q, size=160)],
     ])
 
 
