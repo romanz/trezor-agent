@@ -245,9 +245,9 @@ def run_agent(device_type):
         p.add_argument('--daemon', default=False, action='store_true',
                        help='Daemonize the agent.')
 
-    p.add_argument('--pin-entry-binary', type=str, default='pinentry',
+    p.add_argument('--pin-entry-binary', type=str, default=argparse.SUPPRESS,
                    help='Path to PIN entry UI helper.')
-    p.add_argument('--passphrase-entry-binary', type=str, default='pinentry',
+    p.add_argument('--passphrase-entry-binary', type=str, default=argparse.SUPPRESS,
                    help='Path to passphrase entry UI helper.')
     p.add_argument('--cache-expiry-seconds', type=float, default=float('inf'),
                    help='Expire passphrase from cache after this duration.')
