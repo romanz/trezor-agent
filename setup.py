@@ -26,7 +26,6 @@ setup(
         'backports.shutil_which>=3.5.1',
         'ConfigArgParse>=0.12.1',
         'python-daemon>=2.1.2',
-        'ecdsa>=0.13',
         'pynacl>=1.4.0',
         'mnemonic>=0.18',
         'pymsgbox>=1.0.6',

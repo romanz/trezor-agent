@@ -6,10 +6,20 @@ import logging
 import struct
 
 import nacl.signing
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from .. import formats, util
 
 log = logging.getLogger(__name__)
+
+# NIST P-256 domain parameters from SEC 2, section 2.4.2. Cryptography keeps
+# these values behind its backend API, but GnuPG keygrips hash them directly.
+NIST256_P = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
+NIST256_A = NIST256_P - 3
+NIST256_B = 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
+NIST256_GX = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
+NIST256_GY = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
+NIST256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 
 
 def packet(tag, blob):
@@ -87,9 +97,10 @@ def mpi(value):
 
 
 def _serialize_nist256(vk):
+    point = vk.public_numbers()
     return mpi((4 << 512) |
-               (vk.pubkey.point.x() << 256) |
-               (vk.pubkey.point.y()))
+               (point.x << 256) |
+               point.y)
 
 
 def _serialize_ed25519(vk):
@@ -108,18 +119,18 @@ def _compute_keygrip(params):
 
 def keygrip_nist256(vk):
     """Compute keygrip for NIST256 curve public keys."""
-    curve = vk.curve.curve
-    gen = vk.curve.generator
-    g = (4 << 512) | (gen.x() << 256) | gen.y()
-    point = vk.pubkey.point
-    q = (4 << 512) | (point.x() << 256) | point.y()
+    if not isinstance(vk.curve, ec.SECP256R1):
+        raise ValueError('expected a NIST P-256 public key')
+    point = vk.public_numbers()
+    g = (4 << 512) | (NIST256_GX << 256) | NIST256_GY
+    q = (4 << 512) | (point.x << 256) | point.y
 
     return _compute_keygrip([
-        ['p', util.num2bytes(curve.p(), size=32)],
-        ['a', util.num2bytes(curve.a() % curve.p(), size=32)],
-        ['b', util.num2bytes(curve.b() % curve.p(), size=32)],
+        ['p', util.num2bytes(NIST256_P, size=32)],
+        ['a', util.num2bytes(NIST256_A, size=32)],
+        ['b', util.num2bytes(NIST256_B, size=32)],
         ['g', util.num2bytes(g, size=65)],
-        ['n', util.num2bytes(vk.curve.order, size=32)],
+        ['n', util.num2bytes(NIST256_N, size=32)],
         ['q', util.num2bytes(q, size=65)],
     ])
 

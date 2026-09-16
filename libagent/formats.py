@@ -4,8 +4,11 @@ import hashlib
 import io
 import logging
 
-import ecdsa
 import nacl.signing
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import \
+    encode_dss_signature
 
 from . import util
 
@@ -31,8 +34,6 @@ SSH_ED25519_KEY_TYPE = b'ssh-ed25519'
 SSH_ED25519_CERT_TYPE = SSH_ED25519_KEY_TYPE + SSH_CERT_POSTFIX
 SUPPORTED_KEY_TYPES = {SSH_NIST256_KEY_TYPE, SSH_NIST256_CERT_TYPE,
                        SSH_ED25519_KEY_TYPE, SSH_ED25519_CERT_TYPE}
-
-hashfunc = hashlib.sha256
 
 
 def fingerprint(blob):
@@ -93,14 +94,15 @@ def parse_pubkey(blob):
         assert len(point) == 2 * size
         coords = (util.bytes2num(point[:size]), util.bytes2num(point[size:]))
 
-        curve = ecdsa.NIST256p
-        point = ecdsa.ellipticcurve.Point(curve.curve, *coords)
+        public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP256R1(), SSH_NIST256_DER_OCTET + point)
 
         def ecdsa_verifier(sig, msg):
             assert len(sig) == 2 * size
-            sig_decode = ecdsa.util.sigdecode_string
-            vk = ecdsa.VerifyingKey.from_public_point(point, curve, hashfunc)
-            vk.verify(signature=sig, data=msg, sigdecode=sig_decode)
+            r = util.bytes2num(sig[:size])
+            s = util.bytes2num(sig[size:])
+            signature = encode_dss_signature(r, s)
+            public_key.verify(signature, msg, ec.ECDSA(hashes.SHA256()))
             parts = [sig[:size], sig[size:]]
             return b''.join([util.frame(b'\x00' + p) for p in parts])
 
@@ -141,24 +143,13 @@ def _decompress_nist256(pubkey):
     """
     Load public key from the serialized blob.
 
-    The leading byte least-significant bit is used to decide how to recreate
-    the y-coordinate from the specified x-coordinate. See bitcoin/main.py#L198
-    (from https://github.com/vbuterin/pybitcointools/) for details.
+    Cryptography validates and decompresses the SEC1-encoded point.
     """
     if pubkey[:1] in {b'\x02', b'\x03'}:  # set by ecdsa_get_public_key33()
-        curve = ecdsa.NIST256p
-        P = curve.curve.p()
-        A = curve.curve.a()
-        B = curve.curve.b()
-        x = util.bytes2num(pubkey[1:33])
-        beta = pow(int(x * x * x + A * x + B), int((P + 1) // 4), int(P))
-
-        p0 = util.bytes2num(pubkey[:1])
-        y = (P - beta) if ((beta + p0) % 2) else beta
-
-        point = ecdsa.ellipticcurve.Point(curve.curve, x, y)
-        return ecdsa.VerifyingKey.from_public_point(point, curve=curve,
-                                                    hashfunc=hashfunc)
+        try:
+            return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), pubkey)
+        except ValueError:
+            return None
     else:
         return None
 
@@ -198,9 +189,13 @@ def serialize_verifying_key(vk):
         blob = util.frame(SSH_ED25519_KEY_TYPE) + util.frame(pubkey)
         return key_type, blob
 
-    if isinstance(vk, ecdsa.keys.VerifyingKey):
+    if (isinstance(vk, ec.EllipticCurvePublicKey) and
+            isinstance(vk.curve, ec.SECP256R1)):
         curve_name = SSH_NIST256_CURVE_NAME
-        key_blob = SSH_NIST256_DER_OCTET + vk.to_string()
+        key_blob = vk.public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.UncompressedPoint,
+        )
         parts = [SSH_NIST256_KEY_TYPE, curve_name, key_blob]
         key_type = SSH_NIST256_KEY_TYPE
         blob = b''.join([util.frame(p) for p in parts])

@@ -2,10 +2,10 @@
 
 import logging
 
-import ecdsa
 import semver
+from cryptography.hazmat.primitives.asymmetric import ec
 
-from .. import formats, util
+from .. import formats
 from . import interface
 
 log = logging.getLogger(__name__)
@@ -91,12 +91,7 @@ class BlockstreamJade(interface.Device):
     def _load_uncompressed_pubkey(pubkey, curve_name):
         assert curve_name == formats.CURVE_NIST256
         assert len(pubkey) == 65 and pubkey[0] == 0x04
-        curve = ecdsa.NIST256p
-        point = ecdsa.ellipticcurve.Point(curve.curve,
-                                          util.bytes2num(pubkey[1:33]),
-                                          util.bytes2num(pubkey[33:65]))
-        return ecdsa.VerifyingKey.from_public_point(point, curve=curve,
-                                                    hashfunc=formats.hashfunc)
+        return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), pubkey)
 
     def pubkey(self, identity, ecdh=False):
         """Get PublicKey object for specified BIP32 address and elliptic curve."""

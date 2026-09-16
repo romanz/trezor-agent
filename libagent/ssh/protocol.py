@@ -10,6 +10,8 @@ https://github.com/openssh/openssh-portable/blob/master/authfd.c
 import io
 import logging
 
+from cryptography.exceptions import InvalidSignature
+
 from . import formats, util
 
 log = logging.getLogger(__name__)
@@ -156,7 +158,7 @@ class Handler:
         try:
             sig_bytes = key['verifier'](sig=signature, msg=blob)
             log.info('signature status: OK')
-        except formats.ecdsa.BadSignatureError as e:
+        except InvalidSignature as e:
             log.exception('signature status: ERROR')
             raise ValueError('invalid ECDSA signature') from e
 

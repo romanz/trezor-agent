@@ -6,8 +6,8 @@ import io
 import logging
 import struct
 
-import ecdsa
 import nacl.signing
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from .. import util
 from . import protocol
@@ -56,11 +56,8 @@ def _parse_nist256p1_pubkey(mpi):
     prefix, x, y = util.split_bits(mpi, 4, 256, 256)
     if prefix != 4:
         raise ValueError('Invalid MPI prefix: {}'.format(prefix))
-    point = ecdsa.ellipticcurve.Point(curve=ecdsa.NIST256p.curve,
-                                      x=x, y=y)
-    return ecdsa.VerifyingKey.from_public_point(
-        point=point, curve=ecdsa.curves.NIST256p,
-        hashfunc=hashlib.sha256)
+    point = b'\x04' + util.num2bytes(x, size=32) + util.num2bytes(y, size=32)
+    return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), point)
 
 
 def _parse_ed25519_pubkey(mpi):

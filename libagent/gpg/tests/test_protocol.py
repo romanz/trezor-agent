@@ -1,6 +1,6 @@
-import ecdsa
 import nacl.signing
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from ... import formats
 from .. import protocol
@@ -65,8 +65,7 @@ def test_make_signature():
 
 
 def test_nist256p1():
-    sk = ecdsa.SigningKey.from_secret_exponent(secexp=1, curve=ecdsa.NIST256p)
-    vk = sk.get_verifying_key()
+    vk = ec.derive_private_key(1, ec.SECP256R1()).public_key()
     pk = protocol.PublicKey(curve_name=formats.CURVE_NIST256,
                             created=42, verifying_key=vk)
     assert repr(pk) == 'GPG public key nist256p1/F82361D9'
@@ -74,8 +73,7 @@ def test_nist256p1():
 
 
 def test_nist256p1_ecdh():
-    sk = ecdsa.SigningKey.from_secret_exponent(secexp=1, curve=ecdsa.NIST256p)
-    vk = sk.get_verifying_key()
+    vk = ec.derive_private_key(1, ec.SECP256R1()).public_key()
     pk = protocol.PublicKey(curve_name=formats.CURVE_NIST256,
                             created=42, verifying_key=vk, ecdh=True)
     assert repr(pk) == 'GPG public key nist256p1/5811DF46'

@@ -3,9 +3,10 @@
 import hashlib
 import logging
 
-import ecdsa
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, utils
 
-from .. import formats
+from .. import formats, util
 from . import interface
 
 log = logging.getLogger(__name__)
@@ -33,10 +34,8 @@ class FakeDevice(interface.Device):
         # The code below uses HARD-CODED secret key - and should be used ONLY
         # for GnuPG integration tests (e.g. when no real device is available).
         # pylint: disable=attribute-defined-outside-init
-        self.secexp = 1
-        self.sk = ecdsa.SigningKey.from_secret_exponent(
-            secexp=self.secexp, curve=ecdsa.curves.NIST256p, hashfunc=hashlib.sha256)
-        self.vk = self.sk.get_verifying_key()
+        self.sk = ec.derive_private_key(1, ec.SECP256R1())
+        self.vk = self.sk.public_key()
         return self
 
     def close(self):
@@ -45,10 +44,10 @@ class FakeDevice(interface.Device):
     def pubkey(self, identity, ecdh=False):
         """Return public key."""
         _verify_support(identity)
-        data = self.vk.to_string()
-        x, y = data[:32], data[32:]
-        prefix = bytearray([2 + (bytearray(y)[0] & 1)])
-        pubkey = bytes(prefix) + x
+        pubkey = self.vk.public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.CompressedPoint,
+        )
         return formats.decompress_pubkey(pubkey=pubkey, curve_name=identity.curve_name)
 
     def sign(self, identity, blob):
@@ -57,18 +56,16 @@ class FakeDevice(interface.Device):
             digest = hashlib.sha256(blob).digest()
         else:
             digest = blob
-        return self.sk.sign_digest_deterministic(digest=digest,
-                                                 hashfunc=hashlib.sha256)
+        signature = self.sk.sign(digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
+        r, s = utils.decode_dss_signature(signature)
+        return util.num2bytes(r, size=32) + util.num2bytes(s, size=32)
 
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
         assert pubkey[:1] == b'\x04'
-        peer = ecdsa.VerifyingKey.from_string(
-            pubkey[1:],
-            curve=ecdsa.curves.NIST256p,
-            hashfunc=hashlib.sha256)
-        shared = ecdsa.VerifyingKey.from_public_point(
-            point=(peer.pubkey.point * self.secexp),
-            curve=ecdsa.curves.NIST256p,
-            hashfunc=hashlib.sha256)
-        return shared.to_string()
+        peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), pubkey)
+        # The fixed fake private scalar is one, so the shared point equals the peer point.
+        return peer.public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.UncompressedPoint,
+        )[1:]
