@@ -63,7 +63,9 @@ def run_pubkey(device_type, args):
 
     identity = _create_identity(user_id=args.user_id)
     pubkey = Client(device=device_type()).pubkey(identity=identity)
-    untrusted_comment = f'identity {identity.to_string()}'
+    untrusted_comment = args.untrusted_comment
+    if args.untrusted_comment is None:
+        untrusted_comment = f'identity {identity.to_string()}'
     str_comment = f'untrusted comment: {untrusted_comment}\n'
     payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
     print(str_comment + payload, end="")
@@ -114,6 +116,8 @@ def main(device_type):
     p = subparsers.add_parser('pubkey')
     p.add_argument('user_id')
     p.add_argument('-v', '--verbose', default=0, action='count')
+    p.add_argument('-c', '--untrusted-comment',
+                   help='defaults to "identity <signify://<user_id>|ed25519>"')
     p.set_defaults(func=run_pubkey)
 
     p = subparsers.add_parser('sign')
