@@ -63,9 +63,10 @@ def run_pubkey(device_type, args):
 
     identity = _create_identity(user_id=args.user_id)
     pubkey = Client(device=device_type()).pubkey(identity=identity)
-    comment = f'untrusted comment: identity {identity.to_string()}\n'
+    untrusted_comment = f'identity {identity.to_string()}'
+    str_comment = f'untrusted comment: {untrusted_comment}\n'
     payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
-    print(comment + payload, end="")
+    print(str_comment + payload, end="")
 
 
 def run_sign(device_type, args):
