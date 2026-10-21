@@ -78,6 +78,13 @@ def run_sign(device_type, args):
 
     data_to_sign = sys.stdin.buffer.read()
     sig_alg = ALG_SIGNIFY
+
+    if args.show_data:
+        sys.stderr.flush()
+        msg = b'Data to sign:\nVVVVVVVV\n' + data_to_sign + b'^^^^^^^^\n'
+        sys.stderr.buffer.write(msg)
+        sys.stderr.flush()
+
     if args.prehash:
         # See https://github.com/jedisct1/minisign/commit/6e1023d20758b6fdb2a4b697213b0bf608ba4020
         # Released in https://github.com/jedisct1/minisign/releases/tag/0.6
@@ -130,6 +137,8 @@ def main(device_type):
                    help='embed the message after the signature (signify only)')
     p.add_argument('-H', '--prehash', default=False, action='store_true',
                    help='(minisign only)')
+    p.add_argument('--show-data', default=False, action='store_true',
+                   help='Show data to sign on stderr')
     p.set_defaults(func=run_sign)
 
     args = parser.parse_args()
