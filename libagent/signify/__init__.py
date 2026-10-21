@@ -63,9 +63,12 @@ def run_pubkey(device_type, args):
 
     identity = _create_identity(user_id=args.user_id)
     pubkey = Client(device=device_type()).pubkey(identity=identity)
-    comment = f'untrusted comment: identity {identity.to_string()}\n'
+    untrusted_comment = args.untrusted_comment
+    if args.untrusted_comment is None:
+        untrusted_comment = f'identity {identity.to_string()}'
+    str_comment = f'untrusted comment: {untrusted_comment}\n'
     payload = format_payload(pubkey=pubkey, data=pubkey, sig_alg=ALG_SIGNIFY)
-    print(comment + payload, end="")
+    print(str_comment + payload, end="")
 
 
 def run_sign(device_type, args):
@@ -75,6 +78,13 @@ def run_sign(device_type, args):
 
     data_to_sign = sys.stdin.buffer.read()
     sig_alg = ALG_SIGNIFY
+
+    if args.show_data:
+        sys.stderr.flush()
+        msg = b'Data to sign:\nVVVVVVVV\n' + data_to_sign + b'^^^^^^^^\n'
+        sys.stderr.buffer.write(msg)
+        sys.stderr.flush()
+
     if args.prehash:
         # See https://github.com/jedisct1/minisign/commit/6e1023d20758b6fdb2a4b697213b0bf608ba4020
         # Released in https://github.com/jedisct1/minisign/releases/tag/0.6
@@ -84,13 +94,23 @@ def run_sign(device_type, args):
     sig, pubkey = Client(device=device_type()).sign_with_pubkey(identity, data_to_sign)
     pubkey_str = format_payload(pubkey=pubkey, data=pubkey, sig_alg=sig_alg)
     sig_str = format_payload(pubkey=pubkey, data=sig, sig_alg=sig_alg)
-    untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
+    if args.untrusted_comment is not None:
+        untrusted_comment = f'untrusted comment: {args.untrusted_comment}\n'
+    else:
+        untrusted_comment = f'untrusted comment: pubkey {pubkey_str}'
     print(untrusted_comment + sig_str, end="")
 
-    comment_to_sign = sig + args.comment.encode()
-    sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
-    sig_str = binascii.b2a_base64(sig).decode("ascii")
-    print(f'trusted comment: {args.comment}\n' + sig_str, end="")
+    if args.trusted_comment is not None:
+        comment_to_sign = sig + args.trusted_comment.encode()
+        sig, _ = Client(device=device_type()).sign_with_pubkey(identity, comment_to_sign)
+        sig_str = binascii.b2a_base64(sig).decode("ascii")
+        print(f'trusted comment: {args.trusted_comment}\n' + sig_str, end="")
+
+    if args.embed:
+        # flush to respect print() vs. buffer write order
+        sys.stdout.flush()
+        sys.stdout.buffer.write(data_to_sign)
+        sys.stdout.flush()
 
 
 def main(device_type):
@@ -103,13 +123,22 @@ def main(device_type):
     p = subparsers.add_parser('pubkey')
     p.add_argument('user_id')
     p.add_argument('-v', '--verbose', default=0, action='count')
+    p.add_argument('-c', '--untrusted-comment',
+                   help='defaults to "identity <signify://<user_id>|ed25519>"')
     p.set_defaults(func=run_pubkey)
 
     p = subparsers.add_parser('sign')
     p.add_argument('user_id')
     p.add_argument('-v', '--verbose', default=0, action='count')
-    p.add_argument('-c', '--comment', default=time.asctime())
-    p.add_argument('-H', '--prehash', default=False, action='store_true')
+    p.add_argument('-c', '--untrusted-comment',
+                   help='defaults to "pubkey {pubkey_str}"')
+    p.add_argument('-t', '--trusted-comment')
+    p.add_argument('-e', '--embed', default=False, action='store_true',
+                   help='embed the message after the signature (signify only)')
+    p.add_argument('-H', '--prehash', default=False, action='store_true',
+                   help='(minisign only)')
+    p.add_argument('--show-data', default=False, action='store_true',
+                   help='Show data to sign on stderr')
     p.set_defaults(func=run_sign)
 
     args = parser.parse_args()
