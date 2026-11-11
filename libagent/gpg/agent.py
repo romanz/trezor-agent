@@ -50,18 +50,6 @@ def parse_ecdh(line):
     return dict(items)[b'e']
 
 
-def _key_info(conn, args):
-    """
-    Dummy reply (mainly for 'gpg --edit' to succeed).
-
-    For details, see GnuPG agent KEYINFO command help.
-    https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
-    """
-    fmt = 'S KEYINFO {0} X - - - - - - -'
-    keygrip, = args
-    keyring.sendline(conn, fmt.format(keygrip).encode('ascii'))
-
-
 class AgentError(Exception):
     """GnuPG agent-related error."""
 
@@ -85,6 +73,7 @@ class Handler:
         self.client = client.Client(device=device)
         # Cache public keys from GnuPG
         self.pubkey_bytes = pubkey_bytes
+        self._keygrips = None
         # "Clone" existing GPG version
         self.version = keyring.gpg_version()
 
@@ -101,7 +90,7 @@ class Handler:
             b'PKSIGN': lambda conn, _: self.pksign(conn),
             b'PKDECRYPT': lambda conn, _: self.pkdecrypt(conn),
             b'HAVEKEY': lambda conn, args: self.have_key(conn, *args),
-            b'KEYINFO': _key_info,
+            b'KEYINFO': lambda conn, args: self.key_info(conn, *args),
             b'SCD': self.handle_scd,
             b'GET_PASSPHRASE': self.handle_get_passphrase,
         }
@@ -222,12 +211,30 @@ class Handler:
         ec_point = self.client.ecdh(identity=identity, pubkey=remote_pubkey)
         keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
 
+    def our_keygrips(self):
+        """Return keygrips of the keys made by this agent (without asking the device)."""
+        if self._keygrips is None:
+            self._keygrips = list(decode.iter_keygrips(pubkey_bytes=self.pubkey_bytes))
+        return self._keygrips
+
+    def key_info(self, conn, keygrip):
+        """
+        Dummy reply (mainly for 'gpg --edit' to succeed).
+
+        GnuPG uses it to check for a secret key (e.g. before deleting a public key).
+        For details, see GnuPG agent KEYINFO command help.
+        https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
+        """
+        if binascii.unhexlify(keygrip) not in self.our_keygrips():
+            raise AgentError(b'ERR 67108881 No secret key <GPG Agent>')
+        keyring.sendline(conn, b'S KEYINFO ' + keygrip + b' X - - - - - - -')
+
     def have_key(self, conn, *keygrips):
         """Check if any keygrip corresponds to a TREZOR-based key."""
         if len(keygrips) == 1 and keygrips[0].startswith(b"--list="):
             # Support "fast-path" key listing:
             # https://dev.gnupg.org/rG40da61b89b62dcb77847dc79eb159e885f52f817
-            keygrips = list(decode.iter_keygrips(pubkey_bytes=self.pubkey_bytes))
+            keygrips = self.our_keygrips()
             log.debug('keygrips: %r', keygrips)
             keyring.sendline(conn, b'D ' + util.assuan_serialize(b''.join(keygrips)))
             return
@@ -266,6 +273,7 @@ class Handler:
 
             if command not in self.handlers:
                 log.error('unknown request: %r', line)
+                keyring.sendline(conn, b'ERR 67109139 Unknown IPC command <GPG Agent>')
                 continue
 
             handler = self.handlers[command]

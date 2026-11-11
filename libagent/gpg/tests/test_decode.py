@@ -76,3 +76,11 @@ def test_keygrips():
             b'Roman Zeyde <roman.zeyde@gmail.com>',
             b'Roman Zeyde <me@romanzey.de>',
         ]
+
+
+def test_keygrips_without_marker():
+    pubkey_bytes = (cwd / "86E6792FC27BFD478860C11091F3B339B9A02A3D.gpg").open("rb").read()
+    assert not list(decode.iter_keygrips(pubkey_bytes))
+    # Only the marked keys are reported, when keys are concatenated
+    pubkey_bytes += (cwd / "romanz-pubkey.gpg").open("rb").read()
+    assert len(list(decode.iter_keygrips(pubkey_bytes))) == 2

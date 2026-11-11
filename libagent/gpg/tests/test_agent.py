@@ -1,4 +1,5 @@
 import functools
+import io
 import os
 from unittest import mock
 
@@ -29,7 +30,7 @@ def test_pksign_wrong_key(monkeypatch, caplog):
     with open(path, 'rb') as f:
         handler = agent.Handler(device=device, pubkey_bytes=f.read())
 
-    keygrip = next(decode.iter_keygrips(handler.pubkey_bytes))
+    keygrip = next(decode.parse_packets(io.BytesIO(handler.pubkey_bytes)))['keygrip']
     handler.set_key(util.hexlify(keygrip).encode('ascii'))
     with pytest.raises(agent.AgentError) as e:
         handler.pksign(conn=None)
@@ -80,4 +81,39 @@ def test_pksign_after_device_key_changed(monkeypatch):
     monkeypatch.setattr(device, 'pubkey', lambda identity, ecdh=False: other_key)
     with pytest.raises(agent.AgentError) as e:
         handler.pksign(conn=None)
+    assert e.value.args == (b'ERR 67108881 No secret key <GPG Agent>',)
+
+
+def test_unknown_command(monkeypatch):
+    monkeypatch.setattr(keyring, 'gpg_version', lambda: b'2.4.7')
+    device = fake_device.FakeDevice()
+    device.ui = mock.Mock()
+    handler = agent.Handler(device=device, pubkey_bytes=b'')
+    sent = []
+    monkeypatch.setattr(keyring, 'iterlines', lambda conn: iter([b'DELETE_KEY 1234', b'NOP']))
+    monkeypatch.setattr(keyring, 'sendline', lambda conn, msg, **_: sent.append(msg))
+    handler.handle(conn=None)
+    assert sent == [b'OK', b'ERR 67109139 Unknown IPC command <GPG Agent>', b'OK']
+
+
+def test_key_info(monkeypatch):
+    monkeypatch.setattr(keyring, 'gpg_version', lambda: b'2.4.7')
+    device = fake_device.FakeDevice()
+    device.ui = mock.Mock()
+    cwd = os.path.dirname(__file__)
+    pubkey_bytes = b''
+    for name in ['86E6792FC27BFD478860C11091F3B339B9A02A3D.gpg', 'romanz-pubkey.gpg']:
+        with open(os.path.join(cwd, name), 'rb') as f:
+            pubkey_bytes += f.read()
+    handler = agent.Handler(device=device, pubkey_bytes=pubkey_bytes)
+    sent = []
+    monkeypatch.setattr(keyring, 'sendline', lambda conn, msg, **_: sent.append(msg))
+
+    ours = b'7B2497258D76BC6539ED88D018CD1C739E2DBB6C'  # romanz-pubkey.gpg
+    handler.key_info(None, ours)
+    assert sent == [b'S KEYINFO ' + ours + b' X - - - - - - -']
+
+    others = b'C6BA287B87418F99F5020295EF1D0119023C22DE'  # 86E6792F...gpg (RSA)
+    with pytest.raises(agent.AgentError) as e:
+        handler.key_info(None, others)
     assert e.value.args == (b'ERR 67108881 No secret key <GPG Agent>',)
