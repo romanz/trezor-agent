@@ -4,14 +4,23 @@ import logging
 
 from trezorlib.btc import get_public_node
 from trezorlib.client import PassphraseSetting, get_default_client
-from trezorlib.exceptions import TrezorFailure
-from trezorlib.messages import Capability, IdentityType
+from trezorlib.exceptions import (Cancelled, InvalidSessionError,
+                                  TrezorException, TrezorFailure)
+from trezorlib.messages import Capability, FailureType, IdentityType
 from trezorlib.misc import get_ecdh_session_key, sign_identity
+from trezorlib.transport import TransportException
 
 from .. import formats
 from . import interface
 
 log = logging.getLogger(__name__)
+
+
+def _is_connection_error(e):
+    """Errors of a stale session (e.g. USB errors), unlike PIN or cancellation errors."""
+    if isinstance(e, TrezorException):
+        return isinstance(e, (TransportException, InvalidSessionError))
+    return True
 
 
 class Trezor(interface.Device):
@@ -66,14 +75,45 @@ class Trezor(interface.Device):
         """One session is cached."""
         pass
 
+    def _call(self, func, retry=False, **kwargs):
+        """Call trezorlib function with the cached session.
+
+        On connection errors (e.g. after the device was re-plugged), the session is dropped.
+        If `retry` is set, the call is retried once with a new session (asking again for PIN
+        and passphrase).  Only use it for public keys: the new session may use a different
+        passphrase, so its keys must be checked (by the caller) before signing.
+        """
+        had_session = self.__class__._session is not None
+        try:
+            return func(self.session, **kwargs)
+        except TrezorFailure as e:
+            # The device has responded, so the session is still usable
+            log.debug('%s error: %s', self, e, exc_info=True)
+            if e.code in {FailureType.ActionCancelled, FailureType.PinCancelled}:
+                raise interface.CancelledError('{} cancelled: {}'.format(self, e)) from e
+            raise interface.DeviceError('{} error: {}'.format(self, e)) from e
+        except Exception as e:
+            self.__class__._session = None
+            if isinstance(e, interface.CancelledError):
+                raise  # e.g. PIN or passphrase entry cancelled
+            if isinstance(e, Cancelled):
+                raise interface.CancelledError('{} cancelled: {!r}'.format(self, e)) from e
+            if retry and had_session and _is_connection_error(e):
+                log.warning('%s connection lost (%r), reconnecting', self, e)
+                return self._call(func, **kwargs)  # without session, so no further retry
+            if isinstance(e, TransportException) and not had_session:
+                raise interface.NotFoundError('{} not found: {}'.format(self, e)) from e
+            raise interface.DeviceError('{} error: {!r}'.format(self, e)) from e
+
     def pubkey(self, identity, ecdh=False):
         """Return public key."""
         curve_name = identity.get_curve_name(ecdh=ecdh)
         log.debug('"%s" getting public key (%s) from %s',
                   identity.to_string(), curve_name, self)
         addr = identity.get_bip32_address(ecdh=ecdh)
-        result = get_public_node(
-            self.session,
+        result = self._call(
+            get_public_node,
+            retry=True,
             n=addr,
             ecdsa_curve_name=curve_name)
         log.debug('result: %s', result)
@@ -96,21 +136,16 @@ class Trezor(interface.Device):
         curve_name = identity.get_curve_name(ecdh=False)
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
-        try:
-            result = sign_identity(
-                self.session,
-                identity=self._identity_proto(identity),
-                challenge_hidden=blob,
-                challenge_visual='',
-                ecdsa_curve_name=curve_name)
-            log.debug('result: %s', result)
-            assert len(result.signature) == 65
-            assert result.signature[:1] == b'\x00'
-            return bytes(result.signature[1:]), bytes(result.public_key)
-        except TrezorFailure as e:
-            msg = '{} error: {}'.format(self, e)
-            log.debug(msg, exc_info=True)
-            raise interface.DeviceError(msg)
+        result = self._call(
+            sign_identity,
+            identity=self._identity_proto(identity),
+            challenge_hidden=blob,
+            challenge_visual='',
+            ecdsa_curve_name=curve_name)
+        log.debug('result: %s', result)
+        assert len(result.signature) == 65
+        assert result.signature[:1] == b'\x00'
+        return bytes(result.signature[1:]), bytes(result.public_key)
 
     def ecdh(self, identity, pubkey):
         """Get shared session key using Elliptic Curve Diffie-Hellman."""
@@ -122,21 +157,16 @@ class Trezor(interface.Device):
         curve_name = identity.get_curve_name(ecdh=True)
         log.debug('"%s" shared session key (%s) for %r from %s',
                   identity.to_string(), curve_name, pubkey, self)
-        try:
-            result = get_ecdh_session_key(
-                self.session,
-                identity=self._identity_proto(identity),
-                peer_public_key=pubkey,
-                ecdsa_curve_name=curve_name)
-            log.debug('result: %s', result)
-            assert len(result.session_key) in {65, 33}  # NIST256 or Curve25519
-            assert result.session_key[:1] == b'\x04'
-            self_pubkey = result.public_key
-            if self_pubkey:
-                self_pubkey = bytes(self_pubkey[1:])
+        result = self._call(
+            get_ecdh_session_key,
+            identity=self._identity_proto(identity),
+            peer_public_key=pubkey,
+            ecdsa_curve_name=curve_name)
+        log.debug('result: %s', result)
+        assert len(result.session_key) in {65, 33}  # NIST256 or Curve25519
+        assert result.session_key[:1] == b'\x04'
+        self_pubkey = result.public_key
+        if self_pubkey:
+            self_pubkey = bytes(self_pubkey[1:])
 
-            return bytes(result.session_key), self_pubkey
-        except TrezorFailure as e:
-            msg = '{} error: {}'.format(self, e)
-            log.debug(msg, exc_info=True)
-            raise interface.DeviceError(msg)
+        return bytes(result.session_key), self_pubkey

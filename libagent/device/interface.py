@@ -59,6 +59,10 @@ class DeviceError(Error):
     """Error during device operation."""
 
 
+class CancelledError(DeviceError):
+    """Operation was cancelled by the user."""
+
+
 class Identity:
     """Represent SLIP-0013 identity, together with a elliptic curve choice."""
 

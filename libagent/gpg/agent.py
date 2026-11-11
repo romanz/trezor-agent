@@ -3,6 +3,7 @@ import binascii
 import logging
 
 from .. import util
+from ..device import interface
 from . import client, decode, keyring, protocol
 
 log = logging.getLogger(__name__)
@@ -49,18 +50,6 @@ def parse_ecdh(line):
     return dict(items)[b'e']
 
 
-def _key_info(conn, args):
-    """
-    Dummy reply (mainly for 'gpg --edit' to succeed).
-
-    For details, see GnuPG agent KEYINFO command help.
-    https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
-    """
-    fmt = 'S KEYINFO {0} X - - - - - - -'
-    keygrip, = args
-    keyring.sendline(conn, fmt.format(keygrip).encode('ascii'))
-
-
 class AgentError(Exception):
     """GnuPG agent-related error."""
 
@@ -84,6 +73,7 @@ class Handler:
         self.client = client.Client(device=device)
         # Cache public keys from GnuPG
         self.pubkey_bytes = pubkey_bytes
+        self._keygrips = None
         # "Clone" existing GPG version
         self.version = keyring.gpg_version()
 
@@ -100,7 +90,7 @@ class Handler:
             b'PKSIGN': lambda conn, _: self.pksign(conn),
             b'PKDECRYPT': lambda conn, _: self.pkdecrypt(conn),
             b'HAVEKEY': lambda conn, args: self.have_key(conn, *args),
-            b'KEYINFO': _key_info,
+            b'KEYINFO': lambda conn, args: self.key_info(conn, *args),
             b'SCD': self.handle_scd,
             b'GET_PASSPHRASE': self.handle_get_passphrase,
         }
@@ -153,6 +143,10 @@ class Handler:
 
     @util.memoize_method  # global cache for key grips
     def get_identity(self, keygrip):
+        """Cached find_identity() - only for HAVEKEY, as the device session may change."""
+        return self.find_identity(keygrip)
+
+    def find_identity(self, keygrip):
         """
         Returns device.interface.Identity that matches specified keygrip.
 
@@ -180,12 +174,24 @@ class Handler:
             if pubkey.keygrip() == keygrip_bytes and pubkey.key_id() == pubkey_dict['key_id']:
                 return identity
 
-        raise KeyError(keygrip)
+        names = ', '.join('"{}"'.format(u['value'].decode('utf-8')) for u in user_ids)
+        raise KeyError('{}: public key from device does not match {} ({}) - wrong passphrase, '
+                       'different seed or different device?'.format(
+                           keygrip.decode('ascii'), names, curve_name))
+
+    def get_secret_identity(self):
+        """Return identity of the current key, or report it as missing to GnuPG."""
+        try:
+            # Check the device again, as it may have reconnected with another passphrase
+            return self.find_identity(keygrip=self.keygrip)
+        except KeyError as e:
+            log.error('No secret key: %s', e.args[0])
+            raise AgentError(b'ERR 67108881 No secret key <GPG Agent>') from e
 
     def pksign(self, conn):
         """Sign a message digest using a private EC key."""
         log.debug('signing %r digest (algo #%s)', self.digest, self.algo)
-        identity = self.get_identity(keygrip=self.keygrip)
+        identity = self.get_secret_identity()
         r, s = self.client.sign(identity=identity,
                                 digest=binascii.unhexlify(self.digest))
         result = sig_encode(r, s)
@@ -201,16 +207,34 @@ class Handler:
         assert keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)
 
-        identity = self.get_identity(keygrip=self.keygrip)
+        identity = self.get_secret_identity()
         ec_point = self.client.ecdh(identity=identity, pubkey=remote_pubkey)
         keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
+
+    def our_keygrips(self):
+        """Return keygrips of the keys made by this agent (without asking the device)."""
+        if self._keygrips is None:
+            self._keygrips = list(decode.iter_keygrips(pubkey_bytes=self.pubkey_bytes))
+        return self._keygrips
+
+    def key_info(self, conn, keygrip):
+        """
+        Dummy reply (mainly for 'gpg --edit' to succeed).
+
+        GnuPG uses it to check for a secret key (e.g. before deleting a public key).
+        For details, see GnuPG agent KEYINFO command help.
+        https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/command.c;h=c8b34e9882076b1b724346787781f657cac75499;hb=refs/heads/master#l1082
+        """
+        if binascii.unhexlify(keygrip) not in self.our_keygrips():
+            raise AgentError(b'ERR 67108881 No secret key <GPG Agent>')
+        keyring.sendline(conn, b'S KEYINFO ' + keygrip + b' X - - - - - - -')
 
     def have_key(self, conn, *keygrips):
         """Check if any keygrip corresponds to a TREZOR-based key."""
         if len(keygrips) == 1 and keygrips[0].startswith(b"--list="):
             # Support "fast-path" key listing:
             # https://dev.gnupg.org/rG40da61b89b62dcb77847dc79eb159e885f52f817
-            keygrips = list(decode.iter_keygrips(pubkey_bytes=self.pubkey_bytes))
+            keygrips = self.our_keygrips()
             log.debug('keygrips: %r', keygrips)
             keyring.sendline(conn, b'D ' + util.assuan_serialize(b''.join(keygrips)))
             return
@@ -249,6 +273,7 @@ class Handler:
 
             if command not in self.handlers:
                 log.error('unknown request: %r', line)
+                keyring.sendline(conn, b'ERR 67109139 Unknown IPC command <GPG Agent>')
                 continue
 
             handler = self.handlers[command]
@@ -258,5 +283,17 @@ class Handler:
                 except AgentError as e:
                     msg, = e.args
                     keyring.sendline(conn, msg)
+                    continue
+                except interface.NotFoundError as e:
+                    log.error('%s', e)
+                    keyring.sendline(conn, b'ERR 67108976 Card not present <GPG Agent>')
+                    continue
+                except interface.CancelledError as e:
+                    log.warning('%s', e)
+                    keyring.sendline(conn, b'ERR 67108963 Operation cancelled <GPG Agent>')
+                    continue
+                except interface.DeviceError as e:
+                    log.error('%s', e)
+                    keyring.sendline(conn, b'ERR 67108972 Card error <GPG Agent>')
                     continue
             keyring.sendline(conn, b'OK')

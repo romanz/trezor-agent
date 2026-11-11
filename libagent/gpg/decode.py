@@ -301,8 +301,11 @@ def load_by_keygrip(pubkey_bytes, keygrip):
 
 
 def iter_keygrips(pubkey_bytes):
-    """Iterate over all keygrips in this pubkey."""
+    """Iterate over all keygrips of our keys (marked by a custom subpacket)."""
     for packets in _parse_pubkey_packets(pubkey_bytes):
+        if not any(p['type'] == 'signature' and 'unhashed_subpackets' in p
+                   and has_custom_subpacket(p) for p in packets):
+            continue
         for p in packets:
             keygrip = p.get('keygrip')
             if keygrip:
