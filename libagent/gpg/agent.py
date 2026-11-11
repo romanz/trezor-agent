@@ -180,12 +180,23 @@ class Handler:
             if pubkey.keygrip() == keygrip_bytes and pubkey.key_id() == pubkey_dict['key_id']:
                 return identity
 
-        raise KeyError(keygrip)
+        names = ', '.join('"{}"'.format(u['value'].decode('utf-8')) for u in user_ids)
+        raise KeyError('{}: public key from device does not match {} ({}) - wrong passphrase, '
+                       'different seed or different device?'.format(
+                           keygrip.decode('ascii'), names, curve_name))
+
+    def get_secret_identity(self):
+        """Return identity of the current key, or report it as missing to GnuPG."""
+        try:
+            return self.get_identity(keygrip=self.keygrip)
+        except KeyError as e:
+            log.error('No secret key: %s', e.args[0])
+            raise AgentError(b'ERR 67108881 No secret key <GPG Agent>') from e
 
     def pksign(self, conn):
         """Sign a message digest using a private EC key."""
         log.debug('signing %r digest (algo #%s)', self.digest, self.algo)
-        identity = self.get_identity(keygrip=self.keygrip)
+        identity = self.get_secret_identity()
         r, s = self.client.sign(identity=identity,
                                 digest=binascii.unhexlify(self.digest))
         result = sig_encode(r, s)
@@ -201,7 +212,7 @@ class Handler:
         assert keyring.recvline(conn) == b'END'
         remote_pubkey = parse_ecdh(line)
 
-        identity = self.get_identity(keygrip=self.keygrip)
+        identity = self.get_secret_identity()
         ec_point = self.client.ecdh(identity=identity, pubkey=remote_pubkey)
         keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
 
