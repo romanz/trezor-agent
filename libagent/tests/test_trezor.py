@@ -24,19 +24,60 @@ def test_not_found(device, monkeypatch):
     assert trezor.Trezor._session is None
 
 
-def test_reconnect_after_failure(device):
+def mock_reconnect(monkeypatch, new_session=None, error=None):
+    def get_default_client(**_):
+        if error:
+            raise error
+        client = mock.Mock()
+        client.features.passphrase_protection = False
+        client.get_session.return_value = new_session
+        return client
+    monkeypatch.setattr(trezor, 'get_default_client', get_default_client)
+
+
+def test_reconnect(device, monkeypatch):
     old_session, new_session = mock.Mock(), mock.Mock()
     trezor.Trezor._session = old_session
-    func = mock.Mock(side_effect=OSError('broken pipe'))
-    with pytest.raises(interface.DeviceError):
-        device._call(func, n=[1])
-    func.assert_called_once_with(old_session, n=[1])
-    assert trezor.Trezor._session is None  # next call will reconnect
+    mock_reconnect(monkeypatch, new_session=new_session)
+    func = mock.Mock(side_effect=[OSError('no device'), 'ok'])
+    assert device._call(func, retry=True, n=[1]) == 'ok'
+    assert func.call_args_list == [mock.call(old_session, n=[1]), mock.call(new_session, n=[1])]
+    assert trezor.Trezor._session is new_session
 
-    trezor.Trezor._session = new_session
-    func = mock.Mock(return_value='ok')
-    assert device._call(func, n=[1]) == 'ok'
-    func.assert_called_once_with(new_session, n=[1])
+
+def test_reconnect_not_found(device, monkeypatch):
+    trezor.Trezor._session = mock.Mock()
+    mock_reconnect(monkeypatch, error=TransportException('No Trezor device found'))
+    with pytest.raises(interface.NotFoundError):
+        device._call(mock.Mock(side_effect=OSError('no device')), retry=True)
+    assert trezor.Trezor._session is None
+
+
+def test_retry_only_once(device, monkeypatch):
+    trezor.Trezor._session = mock.Mock()
+    mock_reconnect(monkeypatch, new_session=mock.Mock())
+    func = mock.Mock(side_effect=OSError('no device'))
+    with pytest.raises(interface.DeviceError):
+        device._call(func, retry=True)
+    assert func.call_count == 2
+    assert trezor.Trezor._session is None
+
+
+def test_no_retry_on_cancel(device):
+    trezor.Trezor._session = mock.Mock()
+    func = mock.Mock(side_effect=trezor.TrezorException('cancelled'))
+    with pytest.raises(interface.DeviceError):
+        device._call(func, retry=True)
+    assert func.call_count == 1
+
+
+def test_no_retry_for_signing(device):
+    trezor.Trezor._session = mock.Mock()
+    func = mock.Mock(side_effect=OSError('no device'))
+    with pytest.raises(interface.DeviceError):
+        device._call(func)
+    assert func.call_count == 1
+    assert trezor.Trezor._session is None  # but reconnect on the next call
 
 
 def test_keep_session_on_device_failure(device):

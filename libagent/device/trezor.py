@@ -4,7 +4,8 @@ import logging
 
 from trezorlib.btc import get_public_node
 from trezorlib.client import PassphraseSetting, get_default_client
-from trezorlib.exceptions import TrezorFailure
+from trezorlib.exceptions import (InvalidSessionError, TrezorException,
+                                  TrezorFailure)
 from trezorlib.messages import Capability, IdentityType
 from trezorlib.misc import get_ecdh_session_key, sign_identity
 from trezorlib.transport import TransportException
@@ -13,6 +14,13 @@ from .. import formats
 from . import interface
 
 log = logging.getLogger(__name__)
+
+
+def _is_connection_error(e):
+    """Errors of a stale session (e.g. USB errors), unlike PIN or cancellation errors."""
+    if isinstance(e, TrezorException):
+        return isinstance(e, (TransportException, InvalidSessionError))
+    return True
 
 
 class Trezor(interface.Device):
@@ -67,11 +75,13 @@ class Trezor(interface.Device):
         """One session is cached."""
         pass
 
-    def _call(self, func, **kwargs):
+    def _call(self, func, retry=False, **kwargs):
         """Call trezorlib function with the cached session.
 
-        On connection errors (e.g. after the device was unplugged), the session is dropped,
-        so the next call reconnects (and asks again for PIN and passphrase).
+        On connection errors (e.g. after the device was re-plugged), the session is dropped.
+        If `retry` is set, the call is retried once with a new session (asking again for PIN
+        and passphrase).  Only use it for public keys: the new session may use a different
+        passphrase, so its keys must be checked (by the caller) before signing.
         """
         had_session = self.__class__._session is not None
         try:
@@ -80,6 +90,9 @@ class Trezor(interface.Device):
             raise  # the device has responded, so the session is still usable
         except Exception as e:
             self.__class__._session = None
+            if retry and had_session and _is_connection_error(e):
+                log.warning('%s connection lost (%r), reconnecting', self, e)
+                return self._call(func, **kwargs)  # without session, so no further retry
             if isinstance(e, TransportException) and not had_session:
                 raise interface.NotFoundError('{} not found: {}'.format(self, e)) from e
             raise interface.DeviceError('{} error: {!r}'.format(self, e)) from e
@@ -92,6 +105,7 @@ class Trezor(interface.Device):
         addr = identity.get_bip32_address(ecdh=ecdh)
         result = self._call(
             get_public_node,
+            retry=True,
             n=addr,
             ecdsa_curve_name=curve_name)
         log.debug('result: %s', result)
