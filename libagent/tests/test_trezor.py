@@ -2,6 +2,7 @@
 from unittest import mock
 
 import pytest
+from trezorlib.messages import Failure, FailureType
 from trezorlib.transport import TransportException
 
 from ..device import interface, trezor
@@ -63,12 +64,26 @@ def test_retry_only_once(device, monkeypatch):
     assert trezor.Trezor._session is None
 
 
-def test_no_retry_on_cancel(device):
+@pytest.mark.parametrize('error', [
+    trezor.Cancelled(),
+    interface.CancelledError('PIN entry cancelled'),
+])
+def test_no_retry_on_cancel(device, error):
     trezor.Trezor._session = mock.Mock()
-    func = mock.Mock(side_effect=trezor.TrezorException('cancelled'))
-    with pytest.raises(interface.DeviceError):
+    func = mock.Mock(side_effect=error)
+    with pytest.raises(interface.CancelledError):
         device._call(func, retry=True)
     assert func.call_count == 1
+    assert trezor.Trezor._session is None  # ask again for the passphrase
+
+
+def test_cancel_on_device(device):
+    session = mock.Mock()
+    trezor.Trezor._session = session
+    failure = trezor.TrezorFailure(Failure(code=FailureType.ActionCancelled, message='Cancelled'))
+    with pytest.raises(interface.CancelledError):
+        device._call(mock.Mock(side_effect=failure), retry=True)
+    assert trezor.Trezor._session is session
 
 
 def test_no_retry_for_signing(device):
@@ -83,7 +98,7 @@ def test_no_retry_for_signing(device):
 def test_keep_session_on_device_failure(device):
     session = mock.Mock()
     trezor.Trezor._session = session
-    func = mock.Mock(side_effect=trezor.TrezorFailure(mock.Mock()))
-    with pytest.raises(trezor.TrezorFailure):
-        device._call(func)
+    failure = trezor.TrezorFailure(Failure(code=FailureType.ProcessError, message='oops'))
+    with pytest.raises(interface.DeviceError):
+        device._call(mock.Mock(side_effect=failure), retry=True)
     assert trezor.Trezor._session is session

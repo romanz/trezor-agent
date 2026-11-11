@@ -2,11 +2,13 @@
 
 import logging
 import os
+import re
 import subprocess
 import sys
 
 from .. import util
 from ..gpg import keyring
+from . import interface
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +110,8 @@ def expect(p, prefixes, confidential=False):
     for prefix in prefixes:
         if resp.startswith(prefix):
             return resp[len(prefix):]
+    if re.match(rb'ERR (\d+)', resp) and int(resp.split()[1]) & 0xFFFF == 99:  # GPG_ERR_CANCELED
+        raise interface.CancelledError(resp.strip().decode('utf-8', 'replace'))
     raise UnexpectedError(resp)
 
 

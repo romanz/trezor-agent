@@ -288,6 +288,10 @@ class Handler:
                     log.error('%s', e)
                     keyring.sendline(conn, b'ERR 67108976 Card not present <GPG Agent>')
                     continue
+                except interface.CancelledError as e:
+                    log.warning('%s', e)
+                    keyring.sendline(conn, b'ERR 67108963 Operation cancelled <GPG Agent>')
+                    continue
                 except interface.DeviceError as e:
                     log.error('%s', e)
                     keyring.sendline(conn, b'ERR 67108972 Card error <GPG Agent>')

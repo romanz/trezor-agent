@@ -41,6 +41,7 @@ def test_pksign_wrong_key(monkeypatch, caplog):
 @pytest.mark.parametrize('error, reply', [
     (interface.NotFoundError('not found'), b'ERR 67108976 Card not present <GPG Agent>'),
     (interface.DeviceError('broken pipe'), b'ERR 67108972 Card error <GPG Agent>'),
+    (interface.CancelledError('cancelled'), b'ERR 67108963 Operation cancelled <GPG Agent>'),
 ])
 def test_device_error(monkeypatch, error, reply):
     monkeypatch.setattr(keyring, 'gpg_version', lambda: b'2.4.7')
