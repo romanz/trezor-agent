@@ -3,6 +3,7 @@ import binascii
 import logging
 
 from .. import util
+from ..device import interface
 from . import client, decode, keyring, protocol
 
 log = logging.getLogger(__name__)
@@ -153,6 +154,10 @@ class Handler:
 
     @util.memoize_method  # global cache for key grips
     def get_identity(self, keygrip):
+        """Cached find_identity() - only for HAVEKEY, as the device session may change."""
+        return self.find_identity(keygrip)
+
+    def find_identity(self, keygrip):
         """
         Returns device.interface.Identity that matches specified keygrip.
 
@@ -188,7 +193,8 @@ class Handler:
     def get_secret_identity(self):
         """Return identity of the current key, or report it as missing to GnuPG."""
         try:
-            return self.get_identity(keygrip=self.keygrip)
+            # Check the device again, as it may have reconnected with another passphrase
+            return self.find_identity(keygrip=self.keygrip)
         except KeyError as e:
             log.error('No secret key: %s', e.args[0])
             raise AgentError(b'ERR 67108881 No secret key <GPG Agent>') from e
@@ -269,5 +275,13 @@ class Handler:
                 except AgentError as e:
                     msg, = e.args
                     keyring.sendline(conn, msg)
+                    continue
+                except interface.NotFoundError as e:
+                    log.error('%s', e)
+                    keyring.sendline(conn, b'ERR 67108976 Card not present <GPG Agent>')
+                    continue
+                except interface.DeviceError as e:
+                    log.error('%s', e)
+                    keyring.sendline(conn, b'ERR 67108972 Card error <GPG Agent>')
                     continue
             keyring.sendline(conn, b'OK')

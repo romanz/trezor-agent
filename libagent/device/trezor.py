@@ -7,6 +7,7 @@ from trezorlib.client import PassphraseSetting, get_default_client
 from trezorlib.exceptions import TrezorFailure
 from trezorlib.messages import Capability, IdentityType
 from trezorlib.misc import get_ecdh_session_key, sign_identity
+from trezorlib.transport import TransportException
 
 from .. import formats
 from . import interface
@@ -66,14 +67,31 @@ class Trezor(interface.Device):
         """One session is cached."""
         pass
 
+    def _call(self, func, **kwargs):
+        """Call trezorlib function with the cached session.
+
+        On connection errors (e.g. after the device was unplugged), the session is dropped,
+        so the next call reconnects (and asks again for PIN and passphrase).
+        """
+        had_session = self.__class__._session is not None
+        try:
+            return func(self.session, **kwargs)
+        except TrezorFailure:
+            raise  # the device has responded, so the session is still usable
+        except Exception as e:
+            self.__class__._session = None
+            if isinstance(e, TransportException) and not had_session:
+                raise interface.NotFoundError('{} not found: {}'.format(self, e)) from e
+            raise interface.DeviceError('{} error: {!r}'.format(self, e)) from e
+
     def pubkey(self, identity, ecdh=False):
         """Return public key."""
         curve_name = identity.get_curve_name(ecdh=ecdh)
         log.debug('"%s" getting public key (%s) from %s',
                   identity.to_string(), curve_name, self)
         addr = identity.get_bip32_address(ecdh=ecdh)
-        result = get_public_node(
-            self.session,
+        result = self._call(
+            get_public_node,
             n=addr,
             ecdsa_curve_name=curve_name)
         log.debug('result: %s', result)
@@ -97,8 +115,8 @@ class Trezor(interface.Device):
         log.debug('"%s" signing %r (%s) on %s',
                   identity.to_string(), blob, curve_name, self)
         try:
-            result = sign_identity(
-                self.session,
+            result = self._call(
+                sign_identity,
                 identity=self._identity_proto(identity),
                 challenge_hidden=blob,
                 challenge_visual='',
@@ -123,8 +141,8 @@ class Trezor(interface.Device):
         log.debug('"%s" shared session key (%s) for %r from %s',
                   identity.to_string(), curve_name, pubkey, self)
         try:
-            result = get_ecdh_session_key(
-                self.session,
+            result = self._call(
+                get_ecdh_session_key,
                 identity=self._identity_proto(identity),
                 peer_public_key=pubkey,
                 ecdsa_curve_name=curve_name)
