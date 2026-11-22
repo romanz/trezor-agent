@@ -18,9 +18,7 @@ setup(
         'libagent.ssh',
     ],
     install_requires=[
-        'bech32>=1.2.0',
         'cryptography>=3.4.6',
-        'docutils>=0.14',
         'python-daemon>=2.3.0',
         'ConfigArgParse>=0.12.1',
         'pynacl>=1.4.0',
@@ -30,6 +28,12 @@ setup(
         'unidecode>=0.4.20',
         'pywin32>=300;sys_platform=="win32"'
     ],
+    extras_require = { 
+        "test": [ 
+            'bech32>=1.2.0',
+            'docutils>=0.14',
+        ]
+    }
     platforms=['POSIX', 'win32'],
     classifiers=[
         'Environment :: Console',
