@@ -1,6 +1,9 @@
 """GPG-agent utilities."""
 import binascii
+import hashlib
 import logging
+
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
 from .. import util
 from . import client, decode, keyring, protocol
@@ -35,7 +38,7 @@ def _serialize_point(data):
 
 
 def parse_ecdh(line):
-    """Parse ECDH request and return remote public key."""
+    """Parse ECDH request and return its parameters."""
     prefix, line = line.split(b' ', 1)
     assert prefix == b'D'
     exp, leftover = keyring.parse(keyring.unescape(line))
@@ -43,10 +46,29 @@ def parse_ecdh(line):
     assert not leftover
     label, exp = exp
     assert label == b'enc-val'
-    assert exp[0] == b'ecdh'
+    assert exp[0] in {b'ecdh', b'ecc'}  # GnuPG 2.5+ uses 'ecc' for KEM requests
     items = exp[1:]
     log.debug('ECDH parameters: %r', items)
-    return dict(items)[b'e']
+    return dict(items)
+
+
+AES_KEY_SIZES = {7: 16, 8: 24, 9: 32}  # symmetric algorithm ID -> key size (in bytes)
+
+
+def kem_decrypt(params, ec_point):
+    """
+    Derive the key-encryption key and unwrap the session key (RFC 6637, section 8).
+
+    For details, see GnuPG agent ecc_kem_decrypt() function.
+    https://git.gnupg.org/cgi-bin/gitweb.cgi?p=gnupg.git;a=blob;f=agent/pkdecrypt.c;hb=refs/tags/gnupg-2.5.18
+    """
+    hash_alg = decode.HASH_ALGORITHMS[int(params[b'h'])]
+    key_size = AES_KEY_SIZES[int(params[b'c'])]
+    shared_x = ec_point[1:33]  # skip the prefix byte (and the Y coordinate for NIST256)
+    kek = hashlib.new(hash_alg, b'\x00\x00\x00\x01' + shared_x + params[b'kdf-params']).digest()
+    size, wrapped = params[b's'][0], params[b's'][1:]
+    assert size == len(wrapped)
+    return aes_key_unwrap(kek[:key_size], wrapped)
 
 
 def _key_info(conn, args):
@@ -98,7 +120,7 @@ class Handler:
             b'SETKEY': lambda _, args: self.set_key(*args),
             b'SETHASH': lambda _, args: self.set_hash(*args),
             b'PKSIGN': lambda conn, _: self.pksign(conn),
-            b'PKDECRYPT': lambda conn, _: self.pkdecrypt(conn),
+            b'PKDECRYPT': lambda conn, args: self.pkdecrypt(conn, *args),
             b'HAVEKEY': lambda conn, args: self.have_key(conn, *args),
             b'KEYINFO': _key_info,
             b'SCD': self.handle_scd,
@@ -192,18 +214,22 @@ class Handler:
         log.debug('result: %r', result)
         keyring.sendline(conn, b'D ' + result)
 
-    def pkdecrypt(self, conn):
+    def pkdecrypt(self, conn, *args):
         """Handle decryption using ECDH."""
         for msg in [b'S INQUIRE_MAXLEN 4096', b'INQUIRE CIPHERTEXT']:
             keyring.sendline(conn, msg)
 
         line = keyring.recvline(conn)
         assert keyring.recvline(conn) == b'END'
-        remote_pubkey = parse_ecdh(line)
+        params = parse_ecdh(line)
 
         identity = self.get_identity(keygrip=self.keygrip)
-        ec_point = self.client.ecdh(identity=identity, pubkey=remote_pubkey)
-        keyring.sendline(conn, b'D ' + _serialize_point(ec_point))
+        result = self.client.ecdh(identity=identity, pubkey=params[b'e'])
+        if args:
+            # GnuPG 2.5+ expects the agent to unwrap the session key as well.
+            assert args == (b'--kem=PGP',)
+            result = kem_decrypt(params, result)
+        keyring.sendline(conn, b'D ' + _serialize_point(result))
 
     def have_key(self, conn, *keygrips):
         """Check if any keygrip corresponds to a TREZOR-based key."""
