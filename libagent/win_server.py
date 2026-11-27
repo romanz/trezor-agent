@@ -9,6 +9,7 @@ import win32api
 import win32event
 import win32file
 import win32pipe
+import win32security
 import winerror
 
 from . import util
@@ -59,6 +60,8 @@ class NamedPipe:
     @staticmethod
     def create(name):
         """Opens a named pipe server for receiving connections."""
+        sa = win32security.SECURITY_ATTRIBUTES()
+        sa.SetSecurityDescriptorDacl(True, None, False)
         handle = win32pipe.CreateNamedPipe(
             name,
             win32pipe.PIPE_ACCESS_DUPLEX | win32file.FILE_FLAG_OVERLAPPED,
@@ -67,7 +70,7 @@ class NamedPipe:
             PIPE_BUFFER_SIZE,
             PIPE_BUFFER_SIZE,
             0,
-            None)
+            sa)
 
         if handle == win32file.INVALID_HANDLE_VALUE:
             raise IOError('CreateNamedPipe failed ({0})'.format(win32api.GetLastError()))

@@ -46,7 +46,7 @@ pip install <device>-agent
 
 First, ensure you have Python installed, as described in the above section. Next, ensure you have Git installed:
 ```
-winget install -e --id Git.Git
+winget install --id=Git.Git  -e
 ```
 
 Create a directory for the source code, and clone the repository. Before running this command, you may want to change to a directory where you usually hold documents or source code packages.
@@ -80,7 +80,7 @@ Click on the "Add a feature" button. In the "Find an available optional feature"
 
 Alternatively, you can install the latest version using WinGet:
 ```
-winget install "openssh beta"
+winget install --id=Microsoft.OpenSSH.Beta  -e
 ```
 
 If using an older version of Windows, you can install it using Chocolatey instead:
@@ -111,14 +111,18 @@ You will be required to authorize the use of the key on the device.
 
 #### Running as a service
 
-Adding services to Windows requires the use of a third-party tool. The recommended tool for this task is [NSSM](https://nssm.cc/download). It can be installed using the direct link, or via Chocolatey:
+Adding services to Windows requires the use of a third-party tool. The recommended tool for this task is [NSSM](https://nssm.cc/download). It can be installed using the direct link, or via WinGet:
+```
+winget install --id=NSSM.NSSM  -e
+```
+Or using Chocolatey:
 ```
 choco install nssm
 ```
 
 To set up the service, use the following commands:
 ```
-nssm install "<device>-agent" <device>-agent "file:%USERPROFILE%/.ssh/<device>.pub" -f --sock-path=\\.\pipe\openssh-ssh-agent
+for /F "usebackq delims=" %A in (`where <device>-agent`) do nssm install "<device>-agent" "%A" """file:%USERPROFILE%/.ssh/<device>.pub""" -f --sock-path=\\.\pipe\openssh-ssh-agent
 nssm set "<device>-agent" DisplayName "Hardware Device SSH Authentication Agent"
 ```
 
@@ -146,7 +150,7 @@ The SSH authentication agent is designed to work with OpenSSH and compatible pro
 
 You may download the installer directly, or install it using WinGet:
 ```
-winget install winssh-pageant
+winget install --id=NathanBeals.WinSSH-Pageant  -e
 ```
 
 Once installed, it will automatically run on startup, and deliver key requests to any running SSH agent. This requires the agent to be running as a service. See the section above.
@@ -157,7 +161,7 @@ To use GPG on Windows, you will need [Gpg4win](https://www.gpg4win.org/).
 
 You can [download it directly](https://www.gpg4win.org/thanks-for-download.html) or install it via WinGet
 ```
-winget install -e --id GnuPG.Gpg4win
+winget install --id=GnuPG.Gpg4win  -e
 ```
 Or using Chocolatey:
 ```
@@ -265,6 +269,17 @@ If you receive the following error while building:
 Error: Couldn't find a setup script in C:\Users\MyUser\AppData\Local\Temp\easy_install-2mn9q14a\semver-3.0.1.tar.gz
 ```
 Your Python version may be out of date. Follow the Python installation instructions above. Restart your administrative shell if the update is not being detected.
+
+If while running you receive the following error:
+```
+failed to create process.
+```
+This may be caused by Python being installed in a folder that contains a space in its name. You will need to uninstall and reinstall Python in a different folder:
+```
+winget uninstall python3
+winget install python3 --location="C:\python3"
+```
+After this, you will need to reinstall the agent.
 
 If while running you receive the following error:
 ```
