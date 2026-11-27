@@ -14,6 +14,9 @@ if sys.platform == 'win32':
 
 log = logging.getLogger(__name__)
 
+# The first file descriptor passed by systemd socket activation (SD_LISTEN_FDS_START).
+SD_LISTEN_FDS_START = 3
+
 
 def remove_file(path, remove=os.remove, exists=os.path.exists):
     """Remove file, and raise OSError if still exists."""
@@ -82,6 +85,64 @@ class FDServer:
 def unix_domain_socket_server_from_fd(fd):
     """Build UDS-based socket server from a file descriptor."""
     yield FDServer(fd)
+
+
+def socket_activation_fd(environ=None, pid=None):
+    """Return the listening fd passed by systemd socket activation, else None.
+
+    Implements the ``sd_listen_fds(3)`` protocol: activation is honored only when
+    ``LISTEN_PID`` names this process and ``LISTEN_FDS`` passes at least one
+    socket; the first one is ``SD_LISTEN_FDS_START``. The activation variables
+    are removed from the environment (as with ``unset_environment=1``) so that
+    any subprocess the agent later spawns does not re-interpret them.
+    """
+    if environ is None:
+        environ = os.environ
+    if pid is None:
+        pid = os.getpid()
+
+    listen_pid = environ.get('LISTEN_PID')
+    listen_fds = environ.get('LISTEN_FDS')
+    if listen_pid is None or listen_fds is None:
+        return None
+
+    # Consume the activation variables regardless of validity.
+    for var in ('LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'):
+        environ.pop(var, None)
+
+    if listen_pid != str(pid):
+        log.warning('LISTEN_PID=%s does not match our pid %d; '
+                    'ignoring socket activation', listen_pid, pid)
+        return None
+    try:
+        count = int(listen_fds)
+    except ValueError:
+        log.warning('LISTEN_FDS=%r is not an integer; ignoring', listen_fds)
+        return None
+    if count < 1:
+        log.warning('LISTEN_FDS=%d passed no sockets; ignoring', count)
+        return None
+    if count > 1:
+        log.warning('LISTEN_FDS=%d: only the first passed socket is used', count)
+    return SD_LISTEN_FDS_START
+
+
+@contextlib.contextmanager
+def unix_domain_socket_server_from_systemd(fd):
+    """Adopt a systemd-activated *listening* UNIX-domain socket.
+
+    Unlike :func:`unix_domain_socket_server`, the socket is already bound and
+    listening (systemd owns it), so it is neither bound nor unlinked here: the
+    socket file's lifetime belongs to the ``.socket`` unit.
+    """
+    log.debug('adopting systemd-activated socket on fd %d', fd)
+    # Don't leak the inherited fd into any subprocess the agent spawns.
+    os.set_inheritable(fd, False)
+    server = socket.fromfd(fd, socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        yield server
+    finally:
+        server.close()
 
 
 def handle_connection(conn, handler, mutex):

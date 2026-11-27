@@ -18,6 +18,56 @@ def test_socket():
     assert not os.path.isfile(path)
 
 
+def test_socket_activation_fd():
+    # Not activated: no environment variables present.
+    assert server.socket_activation_fd(environ={}, pid=1234) is None
+
+    # Activated for this process: the first passed fd is adopted, and the
+    # activation variables are consumed.
+    env = {'LISTEN_PID': '1234', 'LISTEN_FDS': '1', 'LISTEN_FDNAMES': 'conn'}
+    assert server.socket_activation_fd(environ=env, pid=1234) == \
+        server.SD_LISTEN_FDS_START
+    assert not env  # activation variables were consumed
+
+    # More than one passed socket: still adopt the first one.
+    env = {'LISTEN_PID': '1234', 'LISTEN_FDS': '3'}
+    assert server.socket_activation_fd(environ=env, pid=1234) == \
+        server.SD_LISTEN_FDS_START
+    assert not env  # activation variables were consumed
+
+    # Activation aimed at another process is ignored (but still consumed).
+    env = {'LISTEN_PID': '5678', 'LISTEN_FDS': '1'}
+    assert server.socket_activation_fd(environ=env, pid=1234) is None
+    assert not env  # activation variables were consumed
+
+    # Malformed / empty fd counts are ignored.
+    assert server.socket_activation_fd(
+        environ={'LISTEN_PID': '1234', 'LISTEN_FDS': 'x'}, pid=1234) is None
+    assert server.socket_activation_fd(
+        environ={'LISTEN_PID': '1234', 'LISTEN_FDS': '0'}, pid=1234) is None
+
+
+def test_socket_server_from_systemd():
+    path = tempfile.mktemp()
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(path)
+    listener.listen(1)
+    try:
+        with server.unix_domain_socket_server_from_systemd(listener.fileno()) as sock:
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client.connect(path)
+            conn, _ = sock.accept()
+            client.sendall(b'ping')
+            assert conn.recv(4) == b'ping'
+            conn.close()
+            client.close()
+        # The socket file belongs to systemd: it must NOT be unlinked.
+        assert os.path.exists(path)
+    finally:
+        listener.close()
+        server.remove_file(path)
+
+
 class FakeSocket:
 
     def __init__(self, data=b''):
